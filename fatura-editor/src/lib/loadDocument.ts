@@ -119,7 +119,10 @@ async function auditPdfPages(doc: pdfjs.PDFDocumentProxy): Promise<PageAudit[]> 
             images = 1;
         }
 
-        audits.push({ index, images, hasInvoiceMarks, looksRelevant: images > 0 || hasInvoiceMarks });
+        // "Gerekli" ölçütü yalnızca QR kod / GİB amblemi gibi gömülü görseldir.
+        // e-fatura metin izleri ekantlarda da geçebildiği için tek başına yeterli
+        // sayılmaz; yalnızca bilgi olarak taşınır.
+        audits.push({ index, images, hasInvoiceMarks, looksRelevant: images > 0 });
     }
 
     for (let index = limit; index < doc.numPages; index += 1) {
