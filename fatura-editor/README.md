@@ -22,28 +22,76 @@ ya da geçmiş tutulmaz. Böylece her fatura için farklı firma/logo kullanabil
 
 ## Bölüm algılama
 
-Fatura yüklendiğinde, sayfanın kendi içeriği çözümlenerek mantıksal bölümler
-çıkarılır: yatay çizgiler bulunur, çizgiler arasındaki yazı blokları gruplanır
-ve bunlar sütunlara ayrılır. Böylece "üstünde ve altında çizgi olan alıcı/adres
-bloğu" gibi alanlar tek tıkla seçilebilir.
+Fatura yüklendiğinde sayfanın kendi içeriği çözümlenerek mantıksal bölümler
+çıkarılır:
+
+1. Yatay çizgiler bulunur — ölçüt satırdaki kesintisiz en uzun parçadır, bu
+   yüzden yalnızca bir sütun genişliğindeki çizgiler de yakalanır.
+2. Yazı satırları, aralarındaki dikey boşluğa göre kümelenir ve her küme geniş
+   boşluklardan sütunlara ayrılır.
+3. Aynı sütundaki parçalar, aralarında **o sütunu kesen** bir çizgi yoksa tek
+   bloğa birleştirilir. Sağdaki bir tablonun kenar çizgisi, soldaki bloğu
+   bölmez.
+4. Bloğun üstünde/altında ona ait bir çizgi varsa kutuya dahil edilir; kalınlığı
+   ve rengi faturadan ölçülür ve çıktıda birebir yeniden çizilir.
 
 Algılama sabit koordinatlara dayanmaz; her faturayı kendi ölçeğinde inceler ve
-sonuçları sayfa oranı olarak tutar. Bu yüzden bölümün boyutu, yeri ya da
-sayfanın ölçüsü faturadan faturaya değişse de bulunur. Bölümler ayrıca
-metin katmanından adlandırılır (örn. alıcı bloğu, satıcı bilgileri).
+sonuçları sayfa oranı olarak tutar. Bölümün boyutu, yeri ya da sayfanın ölçüsü
+faturadan faturaya değişse de bulunur. Bölümler PDF metin katmanından
+adlandırılır (örn. alıcı bloğu, satıcı bilgileri).
 
 Bir faturada hiç bölüm bulunamazsa uyarı gösterilir ve doğrudan serbest çizime
 geçilir — sonuç aynı şekilde çalışır.
 
-## Yazı tipi
+### Aynı bölümü yeni faturada bulma
 
-Başlıkta iki yazı tipinden birini seçebilirsiniz:
+Bir bölüm seçtikten sonra başka bir fatura yüklerseniz, uygulama o bölümün
+eşleniğini **içeriğinden** arar ve bulursa kendiliğinden seçer. Konum
+hatırlanmaz: kendi firma bilgileriniz gibi değişmeyen bir blok sayfanın başka
+bir yerine kaymış olsa da metni aynı olduğu için bulunur. Müşteri bloğu gibi her
+faturada değişen alanlar eşleşmez — bu istenen davranıştır, o bölümü yeniden
+seçersiniz.
 
-- **Modern** (Inter): arayüzdeki yazı tipi, ferah ve çağdaş durur.
-- **Nötr** (Roboto): klasik fatura çıktılarına daha yakın.
+## Yazı tipleri
 
-İkisi de Türkçe karakterlerin tümünü kapsar ve PDF'e gömülür; önizleme ile çıktı
-birebir aynı görünür.
+Başlık için beş yazı tipi vardır; hepsi Türkçe karakterlerin tümünü kapsar,
+PDF'e gömülür ve önizlemeyle birebir aynı görünür:
+
+| Seçenek               | Karakter                                              |
+| --------------------- | ----------------------------------------------------- |
+| Inter · Modern        | Ferah ve çağdaş, nötr                                 |
+| Montserrat · Kurumsal | Geniş, geometrik; firma adı büyük yazıldığında etkili |
+| Roboto · Nötr         | Klasik fatura çıktılarına en yakın                    |
+| Open Sans · Okunur    | Küçük puntoda rahat okunur, uzun adresler için        |
+| PT Serif · Klasik     | Tırnaklı, resmî görünüm                               |
+
+Yalnızca seçtiğiniz yazı tipi indirilir.
+
+## İçerik ve konum ayarları
+
+Sağdaki panel dört sekmeye ayrılmıştır:
+
+- **İçerik** — firma adı ve adres satırları. Her satır ayrı bir alandır;
+  sıralarını değiştirebilir, ekleyip silebilirsiniz. Logo da buradan seçilir.
+- **Konum** — alanın X/Y/genişlik/yükseklik değerleri (% olarak), yatay ve dikey
+  hizalama, iç boşluk, firma adı–adres arası boşluk, yazı ve logo için ince
+  kaydırma, logonun yeri ve boyutu, çerçeve çizgileri (üst/alt, kalınlık, renk,
+  yandan boşluk). Seçili alanı ok tuşlarıyla da kaydırabilirsiniz (Shift ile
+  hızlı).
+- **Stil** — yazı tipi, firma adı ve adres satırları için boyut/harf
+  aralığı/renk, kalın ve BÜYÜK HARF, kapatma rengi (faturadan damlalıkla
+  alınabilir).
+- **Çıktı** — sayfa seçimi, PDF modu ve özet.
+
+## Gereksiz sayfaları çıkarma
+
+Çok sayfalı belgelerde her sayfa, GİB amblemi/QR kod (gömülü görsel) ve
+e-fatura metin izleri (GİB, e-Arşiv, ETTN…) için incelenir. İkisi de bulunmayan
+sayfalar "işaret yok" olarak işaretlenir.
+
+"QR kod / GİB işareti olmayan sayfaları çıkar" anahtarını açarsanız bu sayfalar
+PDF çıktısından tamamen çıkarılır. Anahtar kapalıyken uyarı gösterilir ve
+sayfaları listeden tek tek seçebilirsiniz — hiçbir sayfa sessizce silinmez.
 
 ## Çok sayfalı faturalar
 

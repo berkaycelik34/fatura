@@ -5,6 +5,7 @@ import {
     popGraphicsState,
     pushGraphicsState,
     rgb,
+    setCharacterSpacing,
     type PDFFont,
     type PDFImage,
     type PDFPage,
@@ -62,7 +63,10 @@ function drawHeaderOnPage(page: PDFPage, cfg: HeaderConfig, ctx: DrawContext): v
     const rotation = ((page.getRotation().angle % 360) + 360) % 360;
     const { matrix, viewW, viewH } = viewTransform(rotation, width, height);
 
-    const measure: Measure = (text, size, bold) => (bold ? ctx.bold : ctx.regular).widthOfTextAtSize(text, size);
+    // Harf aralığı PDF'te her karakterden sonra eklenir; canvas da aynı şekilde
+    // davrandığı için ölçüm iki tarafta birebir uyuşur.
+    const measure: Measure = (text, size, bold, spacing) =>
+        (bold ? ctx.bold : ctx.regular).widthOfTextAtSize(text, size) + spacing * text.length;
     const layout = layoutHeader(cfg, viewW, viewH, measure);
     if (!layout) return;
 
@@ -81,6 +85,16 @@ function drawHeaderOnPage(page: PDFPage, cfg: HeaderConfig, ctx: DrawContext): v
         });
     }
 
+    for (const rule of layout.rules) {
+        page.drawRectangle({
+            x: rule.x,
+            y: viewH - (rule.y + rule.h),
+            width: rule.w,
+            height: rule.h,
+            color: hexToRgb(layout.ruleColor),
+        });
+    }
+
     if (layout.logo && ctx.logo) {
         page.drawImage(ctx.logo, {
             x: layout.logo.x,
@@ -90,14 +104,22 @@ function drawHeaderOnPage(page: PDFPage, cfg: HeaderConfig, ctx: DrawContext): v
         });
     }
 
-    const color = hexToRgb(cfg.textColor);
     for (const item of layout.items) {
         const font = item.bold ? ctx.bold : ctx.regular;
         const ascent = font.heightAtSize(item.size, { descender: false });
-        const textWidth = font.widthOfTextAtSize(item.text, item.size);
+        const textWidth = font.widthOfTextAtSize(item.text, item.size) + item.spacing * item.text.length;
         const x =
             item.align === "center" ? item.x - textWidth / 2 : item.align === "right" ? item.x - textWidth : item.x;
-        page.drawText(item.text, { x, y: viewH - (item.top + ascent), size: item.size, font, color });
+
+        if (item.spacing !== 0) page.pushOperators(setCharacterSpacing(item.spacing));
+        page.drawText(item.text, {
+            x,
+            y: viewH - (item.top + ascent),
+            size: item.size,
+            font,
+            color: hexToRgb(item.color),
+        });
+        if (item.spacing !== 0) page.pushOperators(setCharacterSpacing(0));
     }
 
     if (matrix) {
@@ -148,23 +170,34 @@ function pageViewSize(page: RenderedPage): { width: number; height: number } {
  * PDF girdilerinde orijinal dosya yeniden çizilmez; metin ve çizgiler vektörel
  * kalır, sadece seçilen alan yeni başlıkla kapatılır.
  */
-export async function exportPdf(
-    doc: LoadedDocument,
-    cfg: HeaderConfig,
-    targetPages: number[],
-    mode: PdfMode = "vector",
-): Promise<Blob> {
-    const targets = new Set(targetPages);
+export interface ExportOptions {
+    /** Yeni başlığın uygulanacağı sayfalar (özgün sayfa numaraları). */
+    headerPages: number[];
+    /** Çıktıda kalacak sayfalar; buraya girmeyenler PDF'ten çıkarılır. */
+    keepPages: number[];
+    mode: PdfMode;
+}
+
+export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options: ExportOptions): Promise<Blob> {
+    const header = new Set(options.headerPages);
+    const keep = new Set(options.keepPages);
 
     if (doc.kind === "pdf") {
         const source = await PDFDocument.load(doc.bytes.slice());
 
-        if (mode === "vector") {
+        if (options.mode === "vector") {
             source.registerFontkit(fontkit);
             const ctx = await buildContext(source, cfg);
+
             source.getPages().forEach((page, index) => {
-                if (targets.has(index)) drawHeaderOnPage(page, cfg, ctx);
+                if (keep.has(index) && header.has(index)) drawHeaderOnPage(page, cfg, ctx);
             });
+
+            // Çıkarılan sayfalar sondan başa silinir; böylece numaralar kaymaz.
+            for (let index = source.getPageCount() - 1; index >= 0; index -= 1) {
+                if (!keep.has(index)) source.removePage(index);
+            }
+
             return toBlob(await source.save());
         }
 
@@ -173,11 +206,14 @@ export async function exportPdf(
         const ctx = await buildContext(output, cfg);
 
         for (let index = 0; index < source.getPageCount(); index += 1) {
-            if (!targets.has(index)) {
+            if (!keep.has(index)) continue;
+
+            if (!header.has(index)) {
                 const [copied] = await output.copyPages(source, [index]);
                 output.addPage(copied);
                 continue;
             }
+
             const rendered = await doc.renderPage(index);
             const image = await output.embedPng(await canvasToPngBytes(rendered.canvas));
             const size = pageViewSize(rendered);
@@ -201,7 +237,7 @@ export async function exportPdf(
     const size = ratio > 1 ? { width: A4.height, height: A4.width } : A4;
     const page = pdfDoc.addPage([size.width, size.height]);
     page.drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
-    if (targets.has(0)) drawHeaderOnPage(page, cfg, ctx);
+    if (header.has(0)) drawHeaderOnPage(page, cfg, ctx);
 
     return toBlob(await pdfDoc.save());
 }

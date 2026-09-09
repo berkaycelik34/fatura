@@ -1,7 +1,8 @@
 import type { FontId } from "./fonts";
 
 export type Align = "left" | "center" | "right";
-export type LogoPosition = "left" | "top" | "none";
+export type VerticalAlign = "top" | "middle" | "bottom";
+export type LogoPosition = "left" | "right" | "top" | "none";
 
 /** Sayfa üzerindeki dikdörtgen; değerler sayfa ölçüsüne oranlıdır (0..1). */
 export interface Box {
@@ -21,27 +22,52 @@ export interface Logo {
     previewUrl: string;
 }
 
+/**
+ * Başlığın tüm ayarları. Ölçüler kutu yüksekliğine oranlıdır; böylece kutu
+ * boyutu değişse de yerleşim aynı kalır ve her fatura ölçeğinde aynı görünür.
+ */
 export interface HeaderConfig {
+    // İçerik
     companyName: string;
-    /** Adres/iletişim satırları, satır sonlarıyla ayrılmış. */
-    addressText: string;
+    lines: string[];
     logo: Logo | null;
-    logoPosition: LogoPosition;
-    /** Logonun kutu içindeki payı (0..1). */
-    logoScale: number;
+
+    // Konum
     box: Box;
-    background: string;
-    /** Şeffaf seçilirse eski içerik kapatılmaz, üzerine yazılır. */
-    transparentBackground: boolean;
-    textColor: string;
-    /** Yazı boyutları kutu yüksekliğine oranlıdır; her fatura ölçeğinde aynı görünür. */
-    nameSize: number;
-    lineSize: number;
-    lineGap: number;
     padding: number;
     align: Align;
-    bold: boolean;
+    verticalAlign: VerticalAlign;
+    logoPosition: LogoPosition;
+    logoScale: number;
+    logoGap: number;
+    logoOffsetX: number;
+    logoOffsetY: number;
+    textOffsetX: number;
+    textOffsetY: number;
+
+    // Görünüm
     font: FontId;
+    nameSize: number;
+    nameBold: boolean;
+    nameUppercase: boolean;
+    nameSpacing: number;
+    nameColor: string;
+    nameGap: number;
+    lineSize: number;
+    lineGap: number;
+    lineSpacing: number;
+    textColor: string;
+    background: string;
+    transparentBackground: boolean;
+
+    // Bloğu çerçeveleyen yatay çizgiler
+    ruleTop: boolean;
+    ruleBottom: boolean;
+    /** Kutu yüksekliğine oranla çizgi kalınlığı. */
+    ruleThickness: number;
+    ruleColor: string;
+    /** Çizgilerin yanlardan boşluğu (kutu genişliğine oran). */
+    ruleInset: number;
 }
 
 /** Fatura metin katmanından bir parça; bölüm etiketleri için kullanılır. */
@@ -51,6 +77,17 @@ export interface TextSpan {
     w: number;
     h: number;
     text: string;
+}
+
+/** Bir sayfanın "gerekli mi" denetimi: GİB amblemi/QR ve e-fatura izleri. */
+export interface PageAudit {
+    index: number;
+    /** Sayfadaki gömülü görsel sayısı (GİB amblemi ve QR kod bunlardır). */
+    images: number;
+    /** Metinde e-fatura/GİB/ETTN izleri var mı. */
+    hasInvoiceMarks: boolean;
+    /** Bu sayfa faturaya ait görünüyor mu. */
+    looksRelevant: boolean;
 }
 
 /** Yüklenen belgenin ekranda gösterilen tek bir sayfası. */
@@ -71,29 +108,50 @@ export interface LoadedDocument {
     pageCount: number;
     /** Önizlemede gösterilen ilk sayfa. */
     first: RenderedPage;
-    /** İstenen sayfayı çizer (düzleştirme modunda gerekir); sonuç önbelleğe alınır. */
-    renderPage: (index: number) => Promise<RenderedPage>;
     /** İlk sayfanın metin parçaları (varsa); bölüm etiketleri için. */
     firstPageText: TextSpan[];
+    /** İstenen sayfayı çizer (düzleştirme modunda gerekir); sonuç önbelleğe alınır. */
+    renderPage: (index: number) => Promise<RenderedPage>;
+    /** Sayfaların GİB işareti/QR taşıyıp taşımadığını inceler. */
+    auditPages: () => Promise<PageAudit[]>;
     /** Belge kapatılırken pdf.js kaynaklarını serbest bırakır. */
     destroy: () => void;
 }
 
 export const defaultHeaderConfig = (): HeaderConfig => ({
     companyName: "",
-    addressText: "",
+    lines: [""],
     logo: null,
-    logoPosition: "left",
-    logoScale: 0.3,
+
     box: { x: 0.04, y: 0.03, w: 0.46, h: 0.13 },
-    background: "#ffffff",
-    transparentBackground: false,
-    textColor: "#111111",
-    nameSize: 0.22,
-    lineSize: 0.14,
-    lineGap: 1.3,
     padding: 0.08,
     align: "left",
-    bold: true,
+    verticalAlign: "middle",
+    logoPosition: "left",
+    logoScale: 0.3,
+    logoGap: 0.06,
+    logoOffsetX: 0,
+    logoOffsetY: 0,
+    textOffsetX: 0,
+    textOffsetY: 0,
+
     font: "inter",
+    nameSize: 0.22,
+    nameBold: true,
+    nameUppercase: false,
+    nameSpacing: 0,
+    nameColor: "#111111",
+    nameGap: 0.04,
+    lineSize: 0.14,
+    lineGap: 1.3,
+    lineSpacing: 0,
+    textColor: "#111111",
+    background: "#ffffff",
+    transparentBackground: false,
+
+    ruleTop: false,
+    ruleBottom: false,
+    ruleThickness: 0.012,
+    ruleColor: "#111111",
+    ruleInset: 0,
 });

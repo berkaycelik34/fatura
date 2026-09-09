@@ -1,6 +1,6 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { LoadedDocument, Logo, RenderedPage, TextSpan } from "./types";
+import type { LoadedDocument, Logo, PageAudit, RenderedPage, TextSpan } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -74,11 +74,59 @@ async function loadPdf(file: File, bytes: Uint8Array): Promise<LoadedDocument> {
         first: await renderPage(0),
         firstPageText: await readTextSpans(doc),
         renderPage,
+        auditPages: () => auditPdfPages(doc),
         destroy: () => {
             cache.clear();
             void doc.destroy();
         },
     };
+}
+
+/** İncelenecek en fazla sayfa sayısı; çok kalın belgelerde bekleme olmasın. */
+const AUDIT_LIMIT = 80;
+
+const INVOICE_MARKS = /GİB|GIB|e-?ar[şs]iv|e-?fatura|ETTN|Gelir İdaresi/i;
+
+/**
+ * Her sayfada GİB amblemi/QR kod (gömülü görsel) ve e-fatura metin izleri
+ * aranır. İkisi de yoksa sayfa büyük olasılıkla faturaya ait değildir.
+ */
+async function auditPdfPages(doc: pdfjs.PDFDocumentProxy): Promise<PageAudit[]> {
+    const audits: PageAudit[] = [];
+    const limit = Math.min(doc.numPages, AUDIT_LIMIT);
+
+    for (let index = 0; index < limit; index += 1) {
+        const page = await doc.getPage(index + 1);
+        let images = 0;
+        let hasInvoiceMarks = false;
+
+        try {
+            const ops = await page.getOperatorList();
+            for (const fn of ops.fnArray) {
+                if (
+                    fn === pdfjs.OPS.paintImageXObject ||
+                    fn === pdfjs.OPS.paintInlineImageXObject ||
+                    fn === pdfjs.OPS.paintImageMaskXObject
+                ) {
+                    images += 1;
+                }
+            }
+            const content = await page.getTextContent();
+            const text = content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
+            hasInvoiceMarks = INVOICE_MARKS.test(text);
+        } catch {
+            // Okunamayan sayfa "gerekli" sayılır; kimse sessizce silinmez.
+            images = 1;
+        }
+
+        audits.push({ index, images, hasInvoiceMarks, looksRelevant: images > 0 || hasInvoiceMarks });
+    }
+
+    for (let index = limit; index < doc.numPages; index += 1) {
+        audits.push({ index, images: 1, hasInvoiceMarks: false, looksRelevant: true });
+    }
+
+    return audits;
 }
 
 /** İlk sayfanın metin parçalarını sayfa oranlarına çevirir (bölüm etiketleri için). */
@@ -125,6 +173,7 @@ export async function loadDocument(file: File): Promise<LoadedDocument> {
         first,
         firstPageText: [],
         renderPage: async () => first,
+        auditPages: async () => [{ index: 0, images: 1, hasInvoiceMarks: false, looksRelevant: true }],
         destroy: () => {},
     };
 }

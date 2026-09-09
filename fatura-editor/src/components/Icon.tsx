@@ -127,6 +127,24 @@ export function TrashIcon(props: Props) {
     );
 }
 
+export function RuleIcon(props: Props) {
+    return (
+        <Base {...props}>
+            <path d="M4 6.5h16M4 17.5h16" />
+            <path d="M7.5 11h9" strokeDasharray="2 2" />
+        </Base>
+    );
+}
+
+export function MoveIcon(props: Props) {
+    return (
+        <Base {...props}>
+            <path d="M12 4.5v15M4.5 12h15" />
+            <path d="m9 7.5 3-3 3 3M9 16.5l3 3 3-3M7.5 9l-3 3 3 3M16.5 9l3 3-3 3" />
+        </Base>
+    );
+}
+
 export function PagesIcon(props: Props) {
     return (
         <Base {...props}>

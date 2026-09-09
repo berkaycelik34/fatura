@@ -5,10 +5,14 @@ import PagePreview from "./components/PagePreview";
 import PasswordGate from "./components/PasswordGate";
 import { composePage } from "./lib/canvasDraw";
 import { exportPdf, type PdfMode } from "./lib/exportPdf";
-import { loadFonts } from "./lib/fonts";
+import { ensureFont } from "./lib/fonts";
 import { loadDocument, loadLogo } from "./lib/loadDocument";
-import { detectSections, type Section } from "./lib/sections";
-import { defaultHeaderConfig, type Box, type HeaderConfig, type LoadedDocument } from "./lib/types";
+import { detectSections, matchSection, sectionSignature, type Section } from "./lib/sections";
+import { defaultHeaderConfig, type Box, type HeaderConfig, type LoadedDocument, type PageAudit } from "./lib/types";
+
+/** Ok tuşlarıyla kaydırma adımı (sayfa oranı). */
+const NUDGE = 0.002;
+const NUDGE_FAST = 0.01;
 
 function download(blob: Blob, fileName: string) {
     const url = URL.createObjectURL(blob);
@@ -36,41 +40,147 @@ export default function App() {
     const [dragOver, setDragOver] = useState(false);
     const [sections, setSections] = useState<Section[]>([]);
     const [selectMode, setSelectMode] = useState<"section" | "free">("section");
+    // Bölüm algılanan faturalarda başlangıçta hiçbir alan seçili değildir; böylece
+    // varsayılan bir kutu, seçmek istediğiniz bölümün üstünü kapatmaz.
+    const [selected, setSelected] = useState(false);
+    const [matchNote, setMatchNote] = useState<string | null>(null);
+    const [audit, setAudit] = useState<PageAudit[]>([]);
+    const [excluded, setExcluded] = useState<number[]>([]);
+    // Açıkken, GİB amblemi/QR taşımayan sayfalar her faturada kendiliğinden çıkarılır.
+    const [autoDrop, setAutoDrop] = useState(false);
     const docRef = useRef<LoadedDocument | null>(null);
+    // Son seçilen bölümün metin imzası: yeni faturada eşleniğini bulmak için.
+    const signatureRef = useRef<string | null>(null);
+    const autoDropRef = useRef(false);
 
     useEffect(() => {
-        loadFonts().then(
+        autoDropRef.current = autoDrop;
+    }, [autoDrop]);
+
+    useEffect(() => {
+        ensureFont(config.font).then(
             () => setFontsReady(true),
             () => setFontsReady(true),
         );
-    }, []);
+    }, [config.font]);
 
     const patchConfig = useCallback((patch: Partial<HeaderConfig>) => {
         setConfig((previous) => ({ ...previous, ...patch }));
     }, []);
 
-    const setBox = useCallback((box: Box) => patchConfig({ box }), [patchConfig]);
+    const setBox = useCallback(
+        (box: Box) => {
+            patchConfig({ box });
+            setSelected(true);
+        },
+        [patchConfig],
+    );
 
-    const openFile = useCallback(async (file: File | undefined | null) => {
-        if (!file) return;
-        setBusy("Fatura okunuyor…");
-        setError(null);
-        try {
-            const loaded = await loadDocument(file);
-            docRef.current?.destroy();
-            docRef.current = loaded;
-            setDoc(loaded);
-
-            // Bölümleri algıla; bulunamazsa kullanıcı alanı elle çizer.
-            const found = detectSections(loaded.first.canvas, loaded.firstPageText);
-            setSections(found);
-            setSelectMode(found.length > 0 ? "section" : "free");
-        } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Dosya açılamadı.");
-        } finally {
-            setBusy(null);
-        }
+    /** Bölüm seçilince, o bölümü çerçeveleyen çizgiler de birebir yeniden kurulur. */
+    const applySection = useCallback((section: Section) => {
+        setConfig((previous) => ({
+            ...previous,
+            box: section.box,
+            ruleTop: section.rules?.top ?? false,
+            ruleBottom: section.rules?.bottom ?? false,
+            ruleThickness: section.rules?.thickness ?? previous.ruleThickness,
+            ruleColor: section.rules?.color ?? previous.ruleColor,
+        }));
+        setSelected(true);
     }, []);
+
+    const pickSection = useCallback(
+        (section: Section) => {
+            signatureRef.current = sectionSignature(section.label) || null;
+            setMatchNote(null);
+            applySection(section);
+        },
+        [applySection],
+    );
+
+    const openFile = useCallback(
+        async (file: File | undefined | null) => {
+            if (!file) return;
+            setBusy("Fatura okunuyor…");
+            setError(null);
+            try {
+                const loaded = await loadDocument(file);
+                docRef.current?.destroy();
+                docRef.current = loaded;
+                setDoc(loaded);
+                setAudit([]);
+                setExcluded([]);
+
+                // Sayfa denetimi arka planda: önizleme beklemeden açılır.
+                void loaded.auditPages().then((pages) => {
+                    if (docRef.current !== loaded) return;
+                    setAudit(pages);
+                    if (autoDropRef.current) {
+                        setExcluded(pages.filter((page) => !page.looksRelevant).map((page) => page.index));
+                    }
+                });
+
+                // Bölümleri algıla; bulunamazsa kullanıcı alanı elle çizer.
+                const found = detectSections(loaded.first.canvas, loaded.firstPageText);
+                setSections(found);
+                setSelectMode(found.length > 0 ? "section" : "free");
+
+                // Önceki faturada seçilen bölümün eşleniğini içeriğinden ara: sabit
+                // blok sayfanın başka bir yerine kaymış olsa da bulunur.
+                const signature = signatureRef.current;
+                const match = signature && found.length > 0 ? matchSection(found, signature) : null;
+                if (match) {
+                    applySection(match);
+                    setMatchNote(`Önceki faturadaki bölümün eşleniği bulundu ve seçildi: "${match.label}"`);
+                } else {
+                    setSelected(found.length === 0);
+                    setMatchNote(
+                        signature && found.length > 0
+                            ? "Önceki bölümün eşleniği bu faturada bulunamadı; bölümü seçin."
+                            : null,
+                    );
+                }
+            } catch (cause) {
+                setError(cause instanceof Error ? cause.message : "Dosya açılamadı.");
+            } finally {
+                setBusy(null);
+            }
+        },
+        [applySection],
+    );
+
+    // Seçili alanı ok tuşlarıyla kaydırma (Shift ile hızlı).
+    useEffect(() => {
+        if (!selected || !doc) return;
+
+        function onKeyDown(event: KeyboardEvent) {
+            const target = event.target as HTMLElement | null;
+            if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+
+            const step = event.shiftKey ? NUDGE_FAST : NUDGE;
+            const deltas: Record<string, [number, number]> = {
+                ArrowLeft: [-step, 0],
+                ArrowRight: [step, 0],
+                ArrowUp: [0, -step],
+                ArrowDown: [0, step],
+            };
+            const delta = deltas[event.key];
+            if (!delta) return;
+
+            event.preventDefault();
+            setConfig((previous) => ({
+                ...previous,
+                box: {
+                    ...previous.box,
+                    x: Math.min(1 - previous.box.w, Math.max(0, previous.box.x + delta[0])),
+                    y: Math.min(1 - previous.box.h, Math.max(0, previous.box.y + delta[1])),
+                },
+            }));
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [selected, doc]);
 
     async function handleLogoFile(file: File | null) {
         const previous = config.logo?.previewUrl;
@@ -88,19 +198,29 @@ export default function App() {
         }
     }
 
-    // Başlık, tüm sayfalarda aynı alana uygulanır; istenirse sadece ilk sayfaya.
-    const targetPages = useMemo(() => {
+    const keepPages = useMemo(() => {
         if (!doc) return [];
-        if (firstPageOnly) return [0];
-        return Array.from({ length: doc.pageCount }, (_, index) => index);
-    }, [doc, firstPageOnly]);
+        const dropped = new Set(excluded);
+        return Array.from({ length: doc.pageCount }, (_, index) => index).filter((index) => !dropped.has(index));
+    }, [doc, excluded]);
+
+    // Başlık, kalan tüm sayfalarda aynı alana uygulanır; istenirse sadece ilkine.
+    const targetPages = useMemo(() => {
+        if (!doc || !selected) return [];
+        if (firstPageOnly) return keepPages.slice(0, 1);
+        return keepPages;
+    }, [doc, firstPageOnly, selected, keepPages]);
 
     async function downloadPdf() {
         if (!doc) return;
         setBusy(targetPages.length > 1 ? `PDF hazırlanıyor… (${targetPages.length} sayfa)` : "PDF hazırlanıyor…");
         setError(null);
         try {
-            const blob = await exportPdf(doc, config, targetPages, pdfMode);
+            const blob = await exportPdf(doc, config, {
+                headerPages: targetPages,
+                keepPages,
+                mode: pdfMode,
+            });
             download(blob, `${baseName(doc.fileName)}-duzenlenmis.pdf`);
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "PDF oluşturulamadı.");
@@ -111,7 +231,7 @@ export default function App() {
 
     function downloadPng() {
         if (!doc) return;
-        const canvas = composePage(doc.first.canvas, config, true);
+        const canvas = composePage(doc.first.canvas, config, selected);
         canvas.toBlob((blob) => {
             if (blob) download(blob, `${baseName(doc.fileName)}-sayfa-1.png`);
         }, "image/png");
@@ -133,11 +253,15 @@ export default function App() {
     const pageNote =
         doc === null
             ? "Başlamak için fatura yükleyin"
-            : doc.pageCount === 1
-              ? `${doc.fileName} · 1 sayfa`
-              : firstPageOnly
-                ? `${doc.fileName} · ${doc.pageCount} sayfa · sadece 1. sayfa`
-                : `${doc.fileName} · ${doc.pageCount} sayfanın tümüne uygulanır`;
+            : !selected
+              ? `${doc.fileName} · değiştirilecek bölümü seçin`
+              : doc.pageCount === 1
+                ? `${doc.fileName} · 1 sayfa`
+                : firstPageOnly
+                  ? `${doc.fileName} · ${doc.pageCount} sayfa · sadece 1. sayfa`
+                  : excluded.length > 0
+                    ? `${doc.fileName} · ${keepPages.length}/${doc.pageCount} sayfa (${excluded.length} çıkarıldı)`
+                    : `${doc.fileName} · ${doc.pageCount} sayfanın tümüne uygulanır`;
 
     return (
         <div className="app">
@@ -162,7 +286,11 @@ export default function App() {
                             <button
                                 type="button"
                                 className="btn btn-quiet"
-                                onClick={() => setConfig(defaultHeaderConfig())}
+                                onClick={() => {
+                                    setConfig(defaultHeaderConfig());
+                                    setSelected(sections.length === 0);
+                                    setMatchNote(null);
+                                }}
                             >
                                 <ResetIcon />
                                 Sıfırla
@@ -224,8 +352,8 @@ export default function App() {
                     </span>
                     <h2>Faturayı buraya sürükleyin</h2>
                     <p className="muted">
-                        Sol üstteki firma bilgilerini ve logoyu değiştirin, çıktıyı PDF olarak indirin. Dosya
-                        bilgisayarınızdan çıkmaz.
+                        Değiştirmek istediğiniz bölümü seçin, firma bilgilerini ve logoyu girin, çıktıyı PDF olarak
+                        indirin. Dosya bilgisayarınızdan çıkmaz.
                     </p>
                     <label className="btn btn-primary btn-lg btn-file">
                         <input type="file" accept="application/pdf,image/*" onChange={onSelect} />
@@ -244,11 +372,13 @@ export default function App() {
                         <PagePreview
                             page={doc.first}
                             config={config}
-                            showHeader
+                            showHeader={selected}
+                            showSelection={selected}
                             picking={picking}
                             selectMode={selectMode}
                             sections={sections}
                             onBoxChange={setBox}
+                            onPickSection={pickSection}
                             onPickColor={(hex) => {
                                 patchConfig({ background: hex, transparentBackground: false });
                                 setPicking(false);
@@ -270,8 +400,25 @@ export default function App() {
                             onFirstPageOnlyChange={setFirstPageOnly}
                             sections={sections}
                             selectMode={selectMode}
-                            onSelectModeChange={setSelectMode}
-                            onPickSection={setBox}
+                            onSelectModeChange={(mode) => {
+                                setSelectMode(mode);
+                                if (mode === "free") setSelected(true);
+                            }}
+                            onPickSection={pickSection}
+                            selected={selected}
+                            matchNote={matchNote}
+                            audit={audit}
+                            excluded={excluded}
+                            onExcludedChange={setExcluded}
+                            autoDrop={autoDrop}
+                            onAutoDropChange={(value) => {
+                                setAutoDrop(value);
+                                if (value) {
+                                    setExcluded(audit.filter((page) => !page.looksRelevant).map((page) => page.index));
+                                } else {
+                                    setExcluded([]);
+                                }
+                            }}
                         />
                     </aside>
                 </main>

@@ -1,11 +1,21 @@
 import type { Box, TextSpan } from "./types";
 
 /** Algılanan bir bölüm: faturanın mantıksal olarak bir arada duran parçası. */
+/** Bölümü sınırlayan yatay çizgiler; seçildiğinde aynısı yeniden çizilir. */
+export interface SectionRules {
+    top: boolean;
+    bottom: boolean;
+    /** Kutu yüksekliğine oranla çizgi kalınlığı. */
+    thickness: number;
+    color: string;
+}
+
 export interface Section {
     box: Box;
     label: string;
     /** "block": üstünde/altında çizgi olan tam blok, "group": tek bir satır kümesi. */
     level: "block" | "group";
+    rules: SectionRules | null;
 }
 
 /** Çözümleme bu genişliğe küçültülerek yapılır; hız ve tutarlılık için. */
@@ -13,6 +23,8 @@ const WORK_WIDTH = 900;
 
 interface Grid {
     lum: Uint8Array;
+    /** Renk örneklemek için ham piksel verisi (RGBA). */
+    data: Uint8ClampedArray;
     w: number;
     h: number;
     bg: number;
@@ -55,7 +67,7 @@ function toGrid(canvas: HTMLCanvasElement): Grid | null {
         }
     }
 
-    return { lum, w, h, bg };
+    return { lum, data, w, h, bg };
 }
 
 const INK_THRESHOLD = 34;
@@ -79,22 +91,68 @@ interface Range {
     end: number;
 }
 
-/** Sayfa genişliğinin büyük bölümünü kaplayan satırlar: yatay çizgiler. */
-function findRules(counts: Uint32Array, grid: Grid): Range[] {
-    const limit = grid.w * 0.4;
+/** Bir çizgi satırının yatay uzanımını ve rengini ölçer. */
+function measureRule(grid: Grid, rule: Range): { left: number; right: number; color: string } {
+    const { lum, data, w, bg } = grid;
+    let left = w;
+    let right = -1;
+    let darkest = 255;
+    let color = "#111111";
+
+    for (let y = rule.start; y <= rule.end; y += 1) {
+        const base = y * w;
+        for (let x = 0; x < w; x += 1) {
+            if (Math.abs(lum[base + x] - bg) <= INK_THRESHOLD) continue;
+            if (x < left) left = x;
+            if (x > right) right = x;
+            if (lum[base + x] < darkest) {
+                darkest = lum[base + x];
+                const offset = (base + x) * 4;
+                color = `#${[data[offset], data[offset + 1], data[offset + 2]]
+                    .map((value) => value.toString(16).padStart(2, "0"))
+                    .join("")}`;
+            }
+        }
+    }
+
+    return { left: Math.min(left, w - 1), right: Math.max(right, 0), color };
+}
+
+/**
+ * Yatay çizgileri bulur. Ölçüt, satırdaki toplam mürekkep değil kesintisiz en
+ * uzun parçadır: böylece yalnızca bir sütun genişliğindeki çizgiler de bulunur,
+ * yoğun yazı satırları ise (parçaları kısa olduğu için) çizgi sayılmaz.
+ */
+function findRules(grid: Grid): Range[] {
+    const { lum, w, h, bg } = grid;
+    const minRun = Math.max(24, w * 0.18);
     const rules: Range[] = [];
     let start = -1;
-    for (let y = 0; y < grid.h; y += 1) {
-        const isRule = counts[y] > limit;
+
+    for (let y = 0; y < h; y += 1) {
+        const base = y * w;
+        let run = 0;
+        let longest = 0;
+        for (let x = 0; x < w; x += 1) {
+            if (Math.abs(lum[base + x] - bg) > INK_THRESHOLD) {
+                run += 1;
+                if (run > longest) longest = run;
+            } else {
+                run = 0;
+            }
+        }
+
+        const isRule = longest >= minRun;
         if (isRule && start < 0) start = y;
         if (!isRule && start >= 0) {
             rules.push({ start, end: y - 1 });
             start = -1;
         }
     }
-    if (start >= 0) rules.push({ start, end: grid.h - 1 });
+    if (start >= 0) rules.push({ start, end: h - 1 });
+
     // Çok kalın "çizgiler" aslında dolu alanlardır; onları saymıyoruz.
-    return rules.filter((rule) => rule.end - rule.start < grid.h * 0.02);
+    return rules.filter((rule) => rule.end - rule.start < h * 0.02);
 }
 
 /** Ardışık yazı satırlarını, aralarındaki boşluğa göre kümelere ayırır. */
@@ -248,60 +306,178 @@ export function detectSections(canvas: HTMLCanvasElement, spans: TextSpan[] = []
     if (!grid) return [];
 
     const counts = rowProfile(grid);
-    const rules = findRules(counts, grid);
+    const rules = findRules(grid);
     const groups = findGroups(counts, grid, rules);
     if (groups.length === 0) return [];
 
     const minArea = 0.0006;
     const minHeight = Math.max(4, grid.h * 0.004);
-    const candidates: { box: Box; level: Section["level"]; area: number }[] = [];
+    const candidates: { box: Box; level: Section["level"]; rules: SectionRules | null; area: number }[] = [];
 
-    const push = (box: Box | null, level: Section["level"]): void => {
+    const push = (box: Box | null, level: Section["level"], rules: SectionRules | null = null): void => {
         if (!box || box.h < minHeight) return;
         const fraction = toFraction(box, grid);
         const area = fraction.w * fraction.h;
         if (area < minArea) return;
-        candidates.push({ box: fraction, level, area });
+        candidates.push({ box: fraction, level, rules, area });
     };
 
-    // Çizgilerle sınırlanmış bölgeler: aradaki tüm satır kümeleri tek blok sayılır.
-    const boundaries = [0, ...rules.map((rule) => (rule.start + rule.end) / 2), grid.h - 1];
-    for (let i = 0; i < boundaries.length - 1; i += 1) {
-        const top = boundaries[i];
-        const bottom = boundaries[i + 1];
-        if (bottom - top > grid.h * 0.5) continue;
+    // Çizgiler yatay uzanımlarıyla birlikte tutulur: sağdaki bir tablonun kenarı,
+    // soldaki bir bloğu ortadan kesmesin.
+    const ruleInfos = rules.map((range) => ({ range, ...measureRule(grid, range) }));
 
-        const inside = groups.filter((group) => group.start >= top - 1 && group.end <= bottom + 1);
-        if (inside.length === 0) continue;
-
-        const span: Range = {
-            start: Math.min(...inside.map((group) => group.start)),
-            end: Math.max(...inside.map((group) => group.end)),
-        };
-        for (const column of findColumns(grid, inside)) {
-            push(tighten(grid, span, column), "block");
-        }
-    }
-
-    // Tek tek satır kümeleri: çizgi olmayan faturalarda da bölüm çıkarır.
+    // Her satır kümesi sütunlarına ayrılır; bunlar en küçük seçilebilir parçalar.
+    const cells: Box[] = [];
     for (const group of groups) {
         for (const column of findColumns(grid, [group])) {
-            push(tighten(grid, group, column), "group");
+            const box = tighten(grid, group, column);
+            if (box) cells.push(box);
         }
+    }
+    for (const cell of cells) push(cell, "group");
+
+    /**
+     * İki kutunun yatay örtüşme oranı, genişinin üzerinden. Böylece sayfa boyu
+     * uzanan bir satır, tek sütunluk bir bloğu yutmaz.
+     */
+    const shareX = (a: Box, b: Box): number => {
+        const left = Math.max(a.x, b.x);
+        const right = Math.min(a.x + a.w, b.x + b.w);
+        if (right <= left) return 0;
+        return (right - left) / Math.max(a.w, b.w);
+    };
+
+    const spansColumn = (rule: (typeof ruleInfos)[number], box: Box): boolean =>
+        rule.right >= box.x + box.w * 0.25 && rule.left <= box.x + box.w * 0.75;
+
+    /** İki kutu arasında, o sütunu kesen bir çizgi var mı. */
+    const ruleBetween = (upper: Box, lower: Box): boolean =>
+        ruleInfos.some(
+            (rule) =>
+                rule.range.start >= upper.y + upper.h - 1 &&
+                rule.range.end <= lower.y + 1 &&
+                spansColumn(rule, upper) &&
+                spansColumn(rule, lower),
+        );
+
+    // Aynı sütundaki parçalar, aralarında çizgi yoksa tek bloğa birleştirilir.
+    const mergeGap = grid.h * 0.022;
+    const maxBlockHeight = grid.h * 0.4;
+    const blocks: Box[] = [];
+
+    for (const cell of [...cells].sort((a, b) => a.y - b.y)) {
+        const previous = blocks[blocks.length - 1];
+        const mergeable =
+            previous &&
+            shareX(previous, cell) > 0.5 &&
+            cell.y - (previous.y + previous.h) <= mergeGap &&
+            !ruleBetween(previous, cell) &&
+            cell.y + cell.h - previous.y <= maxBlockHeight;
+
+        if (mergeable) {
+            const x = Math.min(previous.x, cell.x);
+            const right = Math.max(previous.x + previous.w, cell.x + cell.w);
+            blocks[blocks.length - 1] = {
+                x,
+                y: previous.y,
+                w: right - x,
+                h: cell.y + cell.h - previous.y,
+            };
+            continue;
+        }
+        blocks.push({ ...cell });
+    }
+
+    // Blokları çerçeveleyen çizgiler kutuya katılır ve aynısı yeniden çizilir.
+    const nearRule = grid.h * 0.035;
+    for (const block of blocks) {
+        // Çizgi bloktan çok daha genişse o bloğun çerçevesi değildir (tek bir
+        // kelimeyi, sütun boyu bir çizgiyle çerçevelemeyelim).
+        const belongsTo = (rule: (typeof ruleInfos)[number]): boolean =>
+            spansColumn(rule, block) && rule.right - rule.left <= block.w * 2.5;
+
+        const above = ruleInfos
+            .filter((rule) => rule.range.end <= block.y && block.y - rule.range.end <= nearRule && belongsTo(rule))
+            .sort((a, b) => b.range.end - a.range.end)[0];
+        const below = ruleInfos
+            .filter(
+                (rule) =>
+                    rule.range.start >= block.y + block.h &&
+                    rule.range.start - (block.y + block.h) <= nearRule &&
+                    belongsTo(rule),
+            )
+            .sort((a, b) => a.range.start - b.range.start)[0];
+
+        // Yalnızca dikeyde büyütülür: çizgiler bloğun genişliğinde yeniden çizilir,
+        // kutu sayfa boyunca genişletilmez.
+        let framed = { ...block };
+        if (above) framed = { ...framed, y: above.range.start, h: framed.h + (framed.y - above.range.start) };
+        if (below) framed = { ...framed, h: below.range.end - framed.y + 1 };
+
+        const thicknessPx = Math.max(
+            above ? above.range.end - above.range.start + 1 : 0,
+            below ? below.range.end - below.range.start + 1 : 0,
+        );
+
+        push(
+            framed,
+            "block",
+            above || below
+                ? {
+                      top: Boolean(above),
+                      bottom: Boolean(below),
+                      thickness: Math.max(0.003, thicknessPx / framed.h),
+                      color: above?.color ?? below?.color ?? "#111111",
+                  }
+                : null,
+        );
     }
 
     // Blok seviyesi öncelikli, birbirinin aynısı olanlar teke indirilir.
     const ordered = candidates.sort((a, b) => (a.level === b.level ? b.area - a.area : a.level === "block" ? -1 : 1));
-    const unique: { box: Box; level: Section["level"] }[] = [];
+    const unique: { box: Box; level: Section["level"]; rules: SectionRules | null }[] = [];
     for (const candidate of ordered) {
         if (unique.some((kept) => overlapRatio(kept.box, candidate.box) > 0.82)) continue;
-        unique.push({ box: candidate.box, level: candidate.level });
+        unique.push({ box: candidate.box, level: candidate.level, rules: candidate.rules });
     }
 
     return unique
         .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
         .slice(0, 40)
         .map((item, index) => ({ ...item, label: labelFor(item.box, spans, index) }));
+}
+
+/** Etiketi karşılaştırılabilir bir imzaya çevirir. */
+export function sectionSignature(label: string): string {
+    return label
+        .toLocaleLowerCase("tr")
+        .replace(/[^\p{L}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((token) => token.length > 2)
+        .join(" ");
+}
+
+/**
+ * Yeni faturada, daha önce seçilen bölümün eşleniğini içeriğinden bulur.
+ * Konum hatırlanmaz: sabit blok (kendi firma bilgileriniz) sayfanın başka bir
+ * yerine kaymış olsa da metni aynı olduğu için bulunur. Müşteri bloğu gibi her
+ * faturada değişen alanlar ise eşleşmez — bu istenen davranıştır.
+ */
+export function matchSection(sections: Section[], signature: string): Section | null {
+    const wanted = new Set(signature.split(" ").filter(Boolean));
+    if (wanted.size === 0) return null;
+
+    let best: { section: Section; score: number } | null = null;
+    for (const section of sections) {
+        const tokens = new Set(sectionSignature(section.label).split(" ").filter(Boolean));
+        if (tokens.size === 0) continue;
+        let shared = 0;
+        for (const token of wanted) if (tokens.has(token)) shared += 1;
+        const score = shared / Math.max(wanted.size, tokens.size);
+        if (!best || score > best.score) best = { section, score };
+    }
+
+    return best && best.score >= 0.6 ? best.section : null;
 }
 
 /** İmlecin altındaki en küçük bölüm; bloklar satır kümelerine göre önceliklidir. */

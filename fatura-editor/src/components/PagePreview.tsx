@@ -17,11 +17,14 @@ interface Props {
     page: RenderedPage;
     config: HeaderConfig;
     showHeader: boolean;
+    /** Seçim çerçevesi yalnızca bir alan seçildikten sonra çizilir. */
+    showSelection: boolean;
     picking: boolean;
     /** "section": algılanan bölüme tıklayarak seç, "free": elle çiz. */
     selectMode: "section" | "free";
     sections: Section[];
     onBoxChange: (box: Box) => void;
+    onPickSection: (section: Section) => void;
     onPickColor: (hex: string) => void;
 }
 
@@ -37,10 +40,12 @@ export default function PagePreview({
     page,
     config,
     showHeader,
+    showSelection,
     picking,
     selectMode,
     sections,
     onBoxChange,
+    onPickSection,
     onPickColor,
 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,7 +181,7 @@ export default function PagePreview({
                 if (selectMode === "section") {
                     const point = pointerFraction(event.clientX, event.clientY);
                     const section = sectionAt(sections, point.x, point.y);
-                    if (section) onBoxChange(section.box);
+                    if (section) onPickSection(section);
                     return;
                 }
                 startDrag(event, { type: "draw" });
@@ -196,9 +201,12 @@ export default function PagePreview({
                     <span className="section-hint-tag">{hovered.label}</span>
                 </div>
             )}
-            {!picking && (
+            {!picking && showSelection && (
                 <div
-                    className="selection"
+                    // Bölüm seçme kipinde gövde tıklamaları alta geçer; böylece seçim
+                    // kutusunun altındaki bölümler de seçilebilir. Boyutlandırma
+                    // tutamaçları her kipte çalışır.
+                    className={selectMode === "section" ? "selection pass-through" : "selection"}
                     style={{
                         left: `${box.x * 100}%`,
                         top: `${box.y * 100}%`,

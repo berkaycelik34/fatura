@@ -1193,3 +1193,208 @@ input[type="range"]::-moz-range-thumb {
     font-size: 10.5px;
     font-weight: 500;
 }
+
+/* Bölüm seçme kipinde seçim gövdesi tıklamayı alta geçirir. */
+.selection.pass-through {
+    pointer-events: none;
+}
+
+.selection.pass-through .handle {
+    pointer-events: auto;
+}
+
+/* Sekmeler */
+.tabs {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    backdrop-filter: blur(18px);
+}
+
+.tabs button {
+    flex: 1;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background 0.16s var(--ease),
+        color 0.16s var(--ease);
+}
+
+.tabs button:hover {
+    color: var(--text);
+}
+
+.tabs button.active {
+    background: var(--accent-grad);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: var(--shadow-glow);
+}
+
+/* Satır düzenleyici */
+.line-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.line-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.line-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+}
+
+.line-actions {
+    display: flex;
+    gap: 2px;
+}
+
+.line-actions .btn {
+    padding: 6px;
+    min-width: 28px;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.line-actions .btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Sayısal ince ayar alanları */
+.number-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.number-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.number-field input {
+    width: 100%;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.number-field input:focus {
+    outline: none;
+    border-color: rgb(124 140 255 / 65%);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Sayfa listesi */
+.page-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.page-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    border: 1px solid transparent;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.page-row:hover {
+    border-color: var(--border-strong);
+}
+
+.page-row.dropped {
+    opacity: 0.5;
+}
+
+.page-row.dropped .page-row-label {
+    text-decoration: line-through;
+}
+
+.page-row-label {
+    flex: 1;
+    color: var(--text);
+}
+
+.page-tag {
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+}
+
+.page-tag.ok {
+    color: #9fe0b8;
+    border-color: rgb(159 224 184 / 30%);
+    background: rgb(159 224 184 / 10%);
+}
+
+.page-tag.warn {
+    color: #ffc27a;
+    border-color: rgb(255 194 122 / 30%);
+    background: rgb(255 194 122 / 10%);
+}
+
+/* Özet listesi */
+.summary {
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.summary div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.summary dt {
+    font-size: 11px;
+    color: var(--dim);
+}
+
+.summary dd {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.dim-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--dim);
+}
