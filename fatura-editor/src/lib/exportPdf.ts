@@ -118,7 +118,7 @@ function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 }
 
 async function buildContext(pdfDoc: PDFDocument, cfg: HeaderConfig): Promise<DrawContext> {
-    const fonts = await fontBytes();
+    const fonts = await fontBytes(cfg.font);
     const [regular, bold] = await Promise.all([
         pdfDoc.embedFont(fonts.regular, { subset: true }),
         pdfDoc.embedFont(fonts.bold, { subset: true }),

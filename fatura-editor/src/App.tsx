@@ -7,6 +7,7 @@ import { composePage } from "./lib/canvasDraw";
 import { exportPdf, type PdfMode } from "./lib/exportPdf";
 import { loadFonts } from "./lib/fonts";
 import { loadDocument, loadLogo } from "./lib/loadDocument";
+import { detectSections, type Section } from "./lib/sections";
 import { defaultHeaderConfig, type Box, type HeaderConfig, type LoadedDocument } from "./lib/types";
 
 function download(blob: Blob, fileName: string) {
@@ -33,6 +34,8 @@ export default function App() {
     const [error, setError] = useState<string | null>(null);
     const [fontsReady, setFontsReady] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const [sections, setSections] = useState<Section[]>([]);
+    const [selectMode, setSelectMode] = useState<"section" | "free">("section");
     const docRef = useRef<LoadedDocument | null>(null);
 
     useEffect(() => {
@@ -57,6 +60,11 @@ export default function App() {
             docRef.current?.destroy();
             docRef.current = loaded;
             setDoc(loaded);
+
+            // Bölümleri algıla; bulunamazsa kullanıcı alanı elle çizer.
+            const found = detectSections(loaded.first.canvas, loaded.firstPageText);
+            setSections(found);
+            setSelectMode(found.length > 0 ? "section" : "free");
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "Dosya açılamadı.");
         } finally {
@@ -238,6 +246,8 @@ export default function App() {
                             config={config}
                             showHeader
                             picking={picking}
+                            selectMode={selectMode}
+                            sections={sections}
                             onBoxChange={setBox}
                             onPickColor={(hex) => {
                                 patchConfig({ background: hex, transparentBackground: false });
@@ -258,6 +268,10 @@ export default function App() {
                             pageCount={doc.pageCount}
                             firstPageOnly={firstPageOnly}
                             onFirstPageOnlyChange={setFirstPageOnly}
+                            sections={sections}
+                            selectMode={selectMode}
+                            onSelectModeChange={setSelectMode}
+                            onPickSection={setBox}
                         />
                     </aside>
                 </main>

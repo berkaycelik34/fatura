@@ -1,3 +1,5 @@
+import type { FontId } from "./fonts";
+
 export type Align = "left" | "center" | "right";
 export type LogoPosition = "left" | "top" | "none";
 
@@ -39,6 +41,16 @@ export interface HeaderConfig {
     padding: number;
     align: Align;
     bold: boolean;
+    font: FontId;
+}
+
+/** Fatura metin katmanından bir parça; bölüm etiketleri için kullanılır. */
+export interface TextSpan {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    text: string;
 }
 
 /** Yüklenen belgenin ekranda gösterilen tek bir sayfası. */
@@ -61,6 +73,8 @@ export interface LoadedDocument {
     first: RenderedPage;
     /** İstenen sayfayı çizer (düzleştirme modunda gerekir); sonuç önbelleğe alınır. */
     renderPage: (index: number) => Promise<RenderedPage>;
+    /** İlk sayfanın metin parçaları (varsa); bölüm etiketleri için. */
+    firstPageText: TextSpan[];
     /** Belge kapatılırken pdf.js kaynaklarını serbest bırakır. */
     destroy: () => void;
 }
@@ -81,4 +95,5 @@ export const defaultHeaderConfig = (): HeaderConfig => ({
     padding: 0.08,
     align: "left",
     bold: true,
+    font: "inter",
 });

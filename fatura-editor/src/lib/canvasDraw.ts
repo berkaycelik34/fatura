@@ -10,7 +10,7 @@ export function drawHeaderOnCanvas(
     pageH: number,
 ): void {
     const measure: Measure = (text, size, bold) => {
-        ctx.font = canvasFont(size, bold);
+        ctx.font = canvasFont(size, bold, cfg.font);
         return ctx.measureText(text).width;
     };
 
@@ -37,7 +37,7 @@ export function drawHeaderOnCanvas(
     ctx.fillStyle = cfg.textColor;
     ctx.textBaseline = "top";
     for (const item of layout.items) {
-        ctx.font = canvasFont(item.size, item.bold);
+        ctx.font = canvasFont(item.size, item.bold, cfg.font);
         ctx.textAlign = item.align;
         ctx.fillText(item.text, item.x, item.top);
     }
