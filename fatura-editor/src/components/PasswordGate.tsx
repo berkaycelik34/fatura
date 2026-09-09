@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { AlertIcon, ArrowRightIcon, InvoiceIcon, LockIcon, ShieldIcon } from "./Icon";
 
 const PASSWORD = import.meta.env.VITE_APP_PASSWORD ?? "1234567890";
 
@@ -22,24 +23,43 @@ export default function PasswordGate({ onUnlock }: Props) {
 
     return (
         <div className="gate">
-            <form className="gate-card" onSubmit={submit}>
-                <h1>Fatura Başlık Düzenleyici</h1>
-                <p className="muted">Devam etmek için şifreyi girin.</p>
-                <input
-                    type="password"
-                    value={value}
-                    autoFocus
-                    placeholder="Şifre"
-                    onChange={(event) => {
-                        setValue(event.target.value);
-                        setError(false);
-                    }}
-                />
-                {error && <p className="error">Şifre hatalı.</p>}
-                <button type="submit" className="primary">
-                    Giriş
-                </button>
-            </form>
+            <div className="gate-inner">
+                <form className="gate-card" onSubmit={submit}>
+                    <div className="brand-mark">
+                        <InvoiceIcon />
+                    </div>
+                    <h1>Fatura Başlık Düzenleyici</h1>
+                    <p className="muted">Faturanın sol üstündeki firma bilgilerini saniyeler içinde değiştirin.</p>
+                    <label className="input-icon">
+                        <LockIcon />
+                        <input
+                            type="password"
+                            value={value}
+                            autoFocus
+                            placeholder="Erişim şifresi"
+                            aria-label="Erişim şifresi"
+                            onChange={(event) => {
+                                setValue(event.target.value);
+                                setError(false);
+                            }}
+                        />
+                    </label>
+                    {error && (
+                        <p className="inline-error">
+                            <AlertIcon />
+                            Şifre hatalı, tekrar deneyin.
+                        </p>
+                    )}
+                    <button type="submit" className="btn btn-primary btn-lg">
+                        Giriş yap
+                        <ArrowRightIcon />
+                    </button>
+                </form>
+                <p className="gate-foot">
+                    <ShieldIcon />
+                    Faturalar tarayıcınızdan çıkmaz, hiçbir veri saklanmaz.
+                </p>
+            </div>
         </div>
     );
 }

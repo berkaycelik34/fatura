@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { drawHeaderOnCanvas } from "../lib/canvasDraw";
+import { CropIcon } from "./Icon";
 import type { Box, HeaderConfig, RenderedPage } from "../lib/types";
 
 /** Önizlemenin çizildiği en büyük genişlik; büyük taramalarda akıcılığı korur. */
@@ -141,7 +142,7 @@ export default function PagePreview({ page, config, showHeader, picking, onBoxCh
     return (
         <div
             ref={wrapRef}
-            className={`preview${picking ? " picking" : ""}`}
+            className={`paper${picking ? " picking" : ""}`}
             onPointerDown={(event) => {
                 if (picking) {
                     pickColorAt(event.clientX, event.clientY);
@@ -162,7 +163,10 @@ export default function PagePreview({ page, config, showHeader, picking, onBoxCh
                     }}
                     onPointerDown={(event) => startDrag(event, { type: "move" })}
                 >
-                    <span className="selection-label">Değiştirilecek alan</span>
+                    <span className="selection-tag">
+                        <CropIcon />
+                        Değiştirilecek alan
+                    </span>
                     {HANDLES.map((handle) => (
                         <span
                             key={handle}

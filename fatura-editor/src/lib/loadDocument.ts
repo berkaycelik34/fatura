@@ -82,20 +82,14 @@ export async function loadDocument(file: File): Promise<LoadedDocument> {
 export async function loadLogo(file: File): Promise<Logo> {
     const buffer = await file.arrayBuffer();
     const type = file.type || "image/png";
-    const url = URL.createObjectURL(new Blob([buffer], { type }));
-
-    let image: HTMLImageElement;
-    try {
-        image = await loadImageElement(url);
-    } finally {
-        URL.revokeObjectURL(url);
-    }
-
+    // Panelde önizleme için adres canlı kalmalı; logo değiştiğinde serbest bırakılır.
+    const previewUrl = URL.createObjectURL(new Blob([buffer], { type }));
+    const image = await loadImageElement(previewUrl);
     const ratio = image.naturalWidth / image.naturalHeight || 1;
 
     if (type === "image/png" || type === "image/jpeg") {
         const format = type === "image/png" ? "png" : "jpg";
-        return { image, bytes: new Uint8Array(buffer), format, ratio };
+        return { image, bytes: new Uint8Array(buffer), format, ratio, previewUrl };
     }
 
     // SVG/WebP gibi biçimleri PDF'e gömebilmek için PNG'ye çeviriyoruz.
@@ -107,6 +101,14 @@ export async function loadLogo(file: File): Promise<Logo> {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Logo dönüştürülemedi.");
-    const converted = await loadImageElement(canvas.toDataURL("image/png"));
-    return { image: converted, bytes: new Uint8Array(await blob.arrayBuffer()), format: "png", ratio };
+    URL.revokeObjectURL(previewUrl);
+    const convertedUrl = URL.createObjectURL(blob);
+    const converted = await loadImageElement(convertedUrl);
+    return {
+        image: converted,
+        bytes: new Uint8Array(await blob.arrayBuffer()),
+        format: "png",
+        ratio,
+        previewUrl: convertedUrl,
+    };
 }

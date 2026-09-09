@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import ControlPanel from "./components/ControlPanel";
+import {
+    AlertIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    DownloadIcon,
+    ImageIcon,
+    InvoiceIcon,
+    ResetIcon,
+    UploadIcon,
+} from "./components/Icon";
 import PagePreview from "./components/PagePreview";
 import PasswordGate from "./components/PasswordGate";
 import { composePage } from "./lib/canvasDraw";
@@ -34,6 +44,7 @@ export default function App() {
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [fontsReady, setFontsReady] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
 
     useEffect(() => {
         loadFonts().then(
@@ -64,12 +75,16 @@ export default function App() {
     }, []);
 
     async function handleLogoFile(file: File | null) {
+        const previous = config.logo?.previewUrl;
         if (!file) {
+            if (previous) URL.revokeObjectURL(previous);
             patchConfig({ logo: null });
             return;
         }
         try {
-            patchConfig({ logo: await loadLogo(file) });
+            const logo = await loadLogo(file);
+            if (previous) URL.revokeObjectURL(previous);
+            patchConfig({ logo });
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "Logo yüklenemedi.");
         }
@@ -104,6 +119,7 @@ export default function App() {
 
     function onDrop(event: DragEvent<HTMLDivElement>) {
         event.preventDefault();
+        setDragOver(false);
         void openFile(event.dataTransfer.files?.[0]);
     }
 
@@ -119,26 +135,45 @@ export default function App() {
     return (
         <div className="app">
             <header className="topbar">
-                <div className="brand">
-                    <strong>Fatura Başlık Düzenleyici</strong>
-                    <span className="muted small">
-                        {doc ? `${doc.fileName} · ${doc.pages.length} sayfa` : "Fatura yükleyin"}
+                <div className="topbar-left">
+                    <span className="brand-mark sm">
+                        <InvoiceIcon />
+                    </span>
+                    <span className="brand-text">
+                        <strong>Fatura Başlık Düzenleyici</strong>
+                        <span className="doc-chip">
+                            {doc ? `${doc.fileName} · ${doc.pages.length} sayfa` : "Başlamak için fatura yükleyin"}
+                        </span>
                     </span>
                 </div>
                 <div className="row">
-                    <label className="file-button">
+                    <label className="btn btn-file">
                         <input type="file" accept="application/pdf,image/*" onChange={onSelect} />
-                        {doc ? "Başka fatura yükle" : "Fatura seç"}
+                        <UploadIcon />
+                        {doc ? "Başka fatura" : "Fatura seç"}
                     </label>
                     {doc && (
                         <>
-                            <button type="button" className="ghost" onClick={() => setConfig(defaultHeaderConfig())}>
-                                Başlığı sıfırla
+                            <button
+                                type="button"
+                                className="btn btn-quiet"
+                                onClick={() => setConfig(defaultHeaderConfig())}
+                            >
+                                <ResetIcon />
+                                Sıfırla
                             </button>
-                            <button type="button" className="ghost" onClick={downloadPng}>
-                                PNG indir
+                            <span className="v-divider" />
+                            <button type="button" className="btn" onClick={downloadPng}>
+                                <ImageIcon />
+                                PNG
                             </button>
-                            <button type="button" className="primary" onClick={downloadPdf} disabled={busy !== null}>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={downloadPdf}
+                                disabled={busy !== null}
+                            >
+                                <DownloadIcon />
                                 PDF indir
                             </button>
                         </>
@@ -146,18 +181,57 @@ export default function App() {
                 </div>
             </header>
 
-            {error && <div className="banner error">{error}</div>}
-            {busy && <div className="banner">{busy}</div>}
-            {!fontsReady && <div className="banner">Yazı tipi yükleniyor…</div>}
+            {(error || busy || !fontsReady) && (
+                <div className="notices">
+                    {error && (
+                        <div className="notice notice-error">
+                            <AlertIcon />
+                            {error}
+                        </div>
+                    )}
+                    {busy && (
+                        <div className="notice">
+                            <span className="spinner" />
+                            {busy}
+                        </div>
+                    )}
+                    {!fontsReady && (
+                        <div className="notice">
+                            <span className="spinner" />
+                            Yazı tipi yükleniyor…
+                        </div>
+                    )}
+                </div>
+            )}
 
             {!doc ? (
-                <div className="dropzone" onDrop={onDrop} onDragOver={(event) => event.preventDefault()}>
-                    <p className="dropzone-title">Faturayı buraya sürükleyin</p>
-                    <p className="muted">PDF, PNG veya JPG · dosya bilgisayarınızdan çıkmaz</p>
-                    <label className="file-button">
+                <div
+                    className={dragOver ? "dropzone over" : "dropzone"}
+                    onDrop={onDrop}
+                    onDragOver={(event) => {
+                        event.preventDefault();
+                        setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                >
+                    <span className="dropzone-badge">
+                        <UploadIcon />
+                    </span>
+                    <h2>Faturayı buraya sürükleyin</h2>
+                    <p className="muted">
+                        Sol üstteki firma bilgilerini ve logoyu değiştirin, çıktıyı PDF olarak indirin. Dosya
+                        bilgisayarınızdan çıkmaz.
+                    </p>
+                    <label className="btn btn-primary btn-lg btn-file">
                         <input type="file" accept="application/pdf,image/*" onChange={onSelect} />
+                        <UploadIcon />
                         Dosya seç
                     </label>
+                    <div className="chips">
+                        <span className="chip">PDF</span>
+                        <span className="chip">PNG</span>
+                        <span className="chip">JPG</span>
+                    </div>
                 </div>
             ) : (
                 <main className="workspace">
@@ -166,22 +240,24 @@ export default function App() {
                             <div className="pager">
                                 <button
                                     type="button"
-                                    className="ghost"
+                                    className="btn btn-quiet btn-icon"
+                                    aria-label="Önceki sayfa"
                                     disabled={pageIndex === 0}
                                     onClick={() => setPageIndex((index) => index - 1)}
                                 >
-                                    ‹
+                                    <ChevronLeftIcon />
                                 </button>
-                                <span>
+                                <span className="pager-count num">
                                     Sayfa {pageIndex + 1} / {doc.pages.length}
                                 </span>
                                 <button
                                     type="button"
-                                    className="ghost"
+                                    className="btn btn-quiet btn-icon"
+                                    aria-label="Sonraki sayfa"
                                     disabled={pageIndex === doc.pages.length - 1}
                                     onClick={() => setPageIndex((index) => index + 1)}
                                 >
-                                    ›
+                                    <ChevronRightIcon />
                                 </button>
                                 <select value={scope} onChange={(event) => setScope(event.target.value as Scope)}>
                                     <option value="current">Sadece bu sayfaya uygula</option>

@@ -15,6 +15,8 @@ export interface Logo {
     bytes: Uint8Array;
     format: "png" | "jpg";
     ratio: number;
+    /** Panelde küçük önizleme için kalıcı adres; logo değişince serbest bırakılır. */
+    previewUrl: string;
 }
 
 export interface HeaderConfig {

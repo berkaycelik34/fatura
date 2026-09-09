@@ -1,6 +1,17 @@
-import type { ChangeEvent } from "react";
+import { useMemo, type ChangeEvent } from "react";
 import type { PdfMode } from "../lib/exportPdf";
 import type { Align, HeaderConfig, LogoPosition } from "../lib/types";
+import {
+    CropIcon,
+    DropperIcon,
+    ImageIcon,
+    InvoiceIcon,
+    LayersIcon,
+    ResetIcon,
+    SparkIcon,
+    TrashIcon,
+    TypeIcon,
+} from "./Icon";
 
 interface Props {
     config: HeaderConfig;
@@ -19,19 +30,16 @@ interface SliderProps {
     min: number;
     max: number;
     step: number;
-    suffix?: string;
+    display?: (value: number) => string;
     onChange: (value: number) => void;
 }
 
-function Slider({ label, value, min, max, step, suffix, onChange }: SliderProps) {
+function Slider({ label, value, min, max, step, display, onChange }: SliderProps) {
     return (
         <label className="field">
             <span className="field-label">
                 {label}
-                <em>
-                    {Math.round(value * 100) / 100}
-                    {suffix ?? ""}
-                </em>
+                <em>{display ? display(value) : `${Math.round(value * 100)}%`}</em>
             </span>
             <input
                 type="range"
@@ -41,6 +49,22 @@ function Slider({ label, value, min, max, step, suffix, onChange }: SliderProps)
                 value={value}
                 onChange={(event) => onChange(Number(event.target.value))}
             />
+        </label>
+    );
+}
+
+interface SwitchProps {
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+}
+
+function Switch({ label, checked, onChange }: SwitchProps) {
+    return (
+        <label className="switch">
+            <span>{label}</span>
+            <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+            <span className="switch-track" />
         </label>
     );
 }
@@ -55,6 +79,8 @@ export default function ControlPanel({
     pdfMode,
     onPdfModeChange,
 }: Props) {
+    const logoUrl = useMemo(() => config.logo?.previewUrl ?? null, [config.logo]);
+
     function handleLogo(event: ChangeEvent<HTMLInputElement>) {
         onLogoFile(event.target.files?.[0] ?? null);
         event.target.value = "";
@@ -62,8 +88,11 @@ export default function ControlPanel({
 
     return (
         <div className="panel">
-            <section>
-                <h2>Yeni başlık</h2>
+            <section className="card">
+                <div className="card-head">
+                    <InvoiceIcon />
+                    <h2>Yeni başlık</h2>
+                </div>
                 <label className="field">
                     <span className="field-label">Firma adı</span>
                     <input
@@ -74,7 +103,7 @@ export default function ControlPanel({
                     />
                 </label>
                 <label className="field">
-                    <span className="field-label">Adres / iletişim</span>
+                    <span className="field-label">Adres ve iletişim</span>
                     <textarea
                         rows={4}
                         value={config.addressText}
@@ -84,16 +113,27 @@ export default function ControlPanel({
                 </label>
             </section>
 
-            <section>
-                <h2>Logo</h2>
-                <div className="row">
-                    <label className="file-button">
+            <section className="card">
+                <div className="card-head">
+                    <ImageIcon />
+                    <h2>Logo</h2>
+                </div>
+                <div className="logo-row">
+                    <span className="logo-thumb">
+                        {logoUrl ? <img src={logoUrl} alt="" /> : <ImageIcon style={{ width: 18, color: "#5f6678" }} />}
+                    </span>
+                    <label className="btn btn-file">
                         <input type="file" accept="image/*" onChange={handleLogo} />
-                        {config.logo ? "Logoyu değiştir" : "Logo seç"}
+                        {config.logo ? "Değiştir" : "Logo seç"}
                     </label>
                     {config.logo && (
-                        <button type="button" className="ghost" onClick={() => onLogoFile(null)}>
-                            Kaldır
+                        <button
+                            type="button"
+                            className="btn btn-quiet btn-icon"
+                            title="Logoyu kaldır"
+                            onClick={() => onLogoFile(null)}
+                        >
+                            <TrashIcon />
                         </button>
                     )}
                 </div>
@@ -122,51 +162,61 @@ export default function ControlPanel({
                 )}
             </section>
 
-            <section>
-                <h2>Alan ve renkler</h2>
-                <p className="muted small">
-                    Fatura üzerinde sürükleyerek yeni alan çizebilir, köşelerden boyutlandırabilirsiniz.
+            <section className="card">
+                <div className="card-head">
+                    <CropIcon />
+                    <h2>Alan ve renkler</h2>
+                </div>
+                <p className="hint">
+                    Fatura üzerinde sürükleyerek yeni bir alan çizin, köşelerden boyutlandırın, ortasından tutup
+                    taşıyın.
                 </p>
                 <div className="row">
-                    <button type="button" className="ghost" onClick={onResetBox}>
+                    <button type="button" className="btn btn-quiet" onClick={onResetBox}>
+                        <ResetIcon />
                         Sol üste sıfırla
                     </button>
-                    <button type="button" className={picking ? "ghost active" : "ghost"} onClick={onTogglePicking}>
-                        {picking ? "Renk seçiliyor…" : "Faturadan renk al"}
+                    <button
+                        type="button"
+                        className={picking ? "btn active" : "btn btn-quiet"}
+                        onClick={onTogglePicking}
+                    >
+                        <DropperIcon />
+                        {picking ? "Renk seçin…" : "Faturadan renk al"}
                     </button>
                 </div>
                 <div className="row">
-                    <label className="field compact">
-                        <span className="field-label">Arka plan</span>
+                    <label className={config.transparentBackground ? "swatch disabled" : "swatch"}>
                         <input
                             type="color"
                             value={config.background}
                             disabled={config.transparentBackground}
                             onChange={(event) => onChange({ background: event.target.value })}
                         />
+                        <span>Arka plan</span>
                     </label>
-                    <label className="field compact">
-                        <span className="field-label">Yazı rengi</span>
+                    <label className="swatch">
                         <input
                             type="color"
                             value={config.textColor}
                             onChange={(event) => onChange({ textColor: event.target.value })}
                         />
+                        <span>Yazı rengi</span>
                     </label>
                 </div>
-                <label className="check">
-                    <input
-                        type="checkbox"
-                        checked={config.transparentBackground}
-                        onChange={(event) => onChange({ transparentBackground: event.target.checked })}
-                    />
-                    Arka planı kapatma (eski içerik görünsün)
-                </label>
+                <Switch
+                    label="Eski içerik görünsün (kapatma)"
+                    checked={config.transparentBackground}
+                    onChange={(transparentBackground) => onChange({ transparentBackground })}
+                />
             </section>
 
-            <section>
-                <h2>Yazı ayarları</h2>
-                <div className="segmented">
+            <section className="card">
+                <div className="card-head">
+                    <TypeIcon />
+                    <h2>Yazı</h2>
+                </div>
+                <div className="seg">
                     {(["left", "center", "right"] as Align[]).map((align) => (
                         <button
                             key={align}
@@ -178,14 +228,7 @@ export default function ControlPanel({
                         </button>
                     ))}
                 </div>
-                <label className="check">
-                    <input
-                        type="checkbox"
-                        checked={config.bold}
-                        onChange={(event) => onChange({ bold: event.target.checked })}
-                    />
-                    Firma adı kalın
-                </label>
+                <Switch label="Firma adı kalın" checked={config.bold} onChange={(bold) => onChange({ bold })} />
                 <Slider
                     label="Firma adı boyutu"
                     value={config.nameSize}
@@ -208,6 +251,7 @@ export default function ControlPanel({
                     min={1}
                     max={2}
                     step={0.05}
+                    display={(value) => `${value.toFixed(2)}×`}
                     onChange={(lineGap) => onChange({ lineGap })}
                 />
                 <Slider
@@ -220,19 +264,23 @@ export default function ControlPanel({
                 />
             </section>
 
-            <section>
-                <h2>PDF çıktısı</h2>
-                <label className="field">
-                    <select value={pdfMode} onChange={(event) => onPdfModeChange(event.target.value as PdfMode)}>
-                        <option value="vector">Orijinali koru (en yüksek kalite)</option>
-                        <option value="flatten">Eski yazıyı tamamen sil</option>
-                    </select>
-                </label>
-                <p className="muted small">
-                    {pdfMode === "vector"
-                        ? "Fatura olduğu gibi kalır, sadece seçtiğiniz alan yeni başlıkla kapatılır. Eski adres görünmez ama PDF içinde metin olarak durmaya devam eder."
-                        : "Değiştirdiğiniz sayfa görüntüye çevrilir; eski adres kopyalanamaz hâle gelir. Yeni başlık yine net kalır, diğer sayfalara dokunulmaz."}
-                </p>
+            <section className="card">
+                <div className="card-head">
+                    <LayersIcon />
+                    <h2>PDF çıktısı</h2>
+                </div>
+                <select value={pdfMode} onChange={(event) => onPdfModeChange(event.target.value as PdfMode)}>
+                    <option value="vector">Orijinali koru — en yüksek kalite</option>
+                    <option value="flatten">Eski yazıyı tamamen sil</option>
+                </select>
+                <div className="mode-note">
+                    <SparkIcon />
+                    <p className="hint">
+                        {pdfMode === "vector"
+                            ? "Fatura olduğu gibi kalır, sadece seçtiğiniz alan yeni başlıkla kapatılır. Eski adres görünmez ama PDF'in metin katmanında durmaya devam eder."
+                            : "Değiştirdiğiniz sayfa görüntüye çevrilir; eski adres kopyalanamaz hâle gelir. Yeni başlık yine net kalır, diğer sayfalara dokunulmaz."}
+                    </p>
+                </div>
             </section>
         </div>
     );
