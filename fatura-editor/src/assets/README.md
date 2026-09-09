@@ -1,14 +1,15 @@
 # Yazı tipleri
 
-## Inter (arayüz)
+## Inter (arayüz ve "Modern" başlık yazı tipi)
 
-`Inter-latin.woff2` ve `Inter-latin-ext.woff2`, Google Fonts'tan alınan Inter
-değişken yazı tipinin (400–700) latin ve latin-ext alt kümeleridir.
+`Inter-latin.woff2` / `Inter-latin-ext.woff2` arayüz için, `Inter-Regular.ttf` /
+`Inter-Bold.ttf` ise PDF'e gömmek için kullanılır (latin + latin-ext, Türkçe
+karakterlerin tümünü kapsar).
 
 - Kaynak: https://fonts.google.com/specimen/Inter
 - Lisans: SIL Open Font License 1.1 — https://openfontlicense.org
 
-## Roboto (PDF çıktısı)
+## Roboto ("Nötr" başlık yazı tipi)
 
 `Roboto-Regular.ttf` ve `Roboto-Bold.ttf`, Google Fonts'tan alınan Roboto'nun
 `latin-ext` alt kümesidir (Türkçe karakterleri kapsar).

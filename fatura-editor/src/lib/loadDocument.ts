@@ -1,6 +1,6 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { LoadedDocument, Logo, RenderedPage } from "./types";
+import type { LoadedDocument, Logo, RenderedPage, TextSpan } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -72,12 +72,43 @@ async function loadPdf(file: File, bytes: Uint8Array): Promise<LoadedDocument> {
         bytes,
         pageCount: doc.numPages,
         first: await renderPage(0),
+        firstPageText: await readTextSpans(doc),
         renderPage,
         destroy: () => {
             cache.clear();
             void doc.destroy();
         },
     };
+}
+
+/** İlk sayfanın metin parçalarını sayfa oranlarına çevirir (bölüm etiketleri için). */
+async function readTextSpans(doc: pdfjs.PDFDocumentProxy): Promise<TextSpan[]> {
+    try {
+        const page = await doc.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        const content = await page.getTextContent();
+
+        return content.items.flatMap((item) => {
+            if (!("str" in item) || item.str.trim() === "") return [];
+            const [, , , , e, f] = item.transform;
+            const start = viewport.convertToViewportPoint(e, f);
+            const end = viewport.convertToViewportPoint(e + item.width, f + item.height);
+            const x = Math.min(start[0], end[0]);
+            const y = Math.min(start[1], end[1]);
+            return [
+                {
+                    x: x / viewport.width,
+                    y: y / viewport.height,
+                    w: Math.abs(end[0] - start[0]) / viewport.width,
+                    h: Math.abs(end[1] - start[1]) / viewport.height,
+                    text: item.str,
+                },
+            ];
+        });
+    } catch {
+        // Metin katmanı okunamazsa bölümler etiketsiz kalır; algılama yine çalışır.
+        return [];
+    }
 }
 
 export async function loadDocument(file: File): Promise<LoadedDocument> {
@@ -92,6 +123,7 @@ export async function loadDocument(file: File): Promise<LoadedDocument> {
         bytes,
         pageCount: 1,
         first,
+        firstPageText: [],
         renderPage: async () => first,
         destroy: () => {},
     };

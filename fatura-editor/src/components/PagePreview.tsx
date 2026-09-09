@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { drawHeaderOnCanvas } from "../lib/canvasDraw";
-import { CropIcon } from "./Icon";
+import { sectionAt, type Section } from "../lib/sections";
 import type { Box, HeaderConfig, RenderedPage } from "../lib/types";
+import { CropIcon } from "./Icon";
 
 /** Önizlemenin çizildiği en büyük genişlik; büyük taramalarda akıcılığı korur. */
 const MAX_PREVIEW_WIDTH = 1400;
@@ -17,6 +18,9 @@ interface Props {
     config: HeaderConfig;
     showHeader: boolean;
     picking: boolean;
+    /** "section": algılanan bölüme tıklayarak seç, "free": elle çiz. */
+    selectMode: "section" | "free";
+    sections: Section[];
     onBoxChange: (box: Box) => void;
     onPickColor: (hex: string) => void;
 }
@@ -29,10 +33,20 @@ function toHex(r: number, g: number, b: number): string {
     return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
-export default function PagePreview({ page, config, showHeader, picking, onBoxChange, onPickColor }: Props) {
+export default function PagePreview({
+    page,
+    config,
+    showHeader,
+    picking,
+    selectMode,
+    sections,
+    onBoxChange,
+    onPickColor,
+}: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
     const [drag, setDrag] = useState<{ mode: Mode; origin: Box; startX: number; startY: number } | null>(null);
+    const [hovered, setHovered] = useState<Section | null>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -54,6 +68,15 @@ export default function PagePreview({ page, config, showHeader, picking, onBoxCh
         if (!rect) return { x: 0, y: 0 };
         return { x: clamp((clientX - rect.left) / rect.width), y: clamp((clientY - rect.top) / rect.height) };
     }, []);
+
+    function hoverSection(clientX: number, clientY: number) {
+        if (selectMode !== "section" || picking || drag) {
+            setHovered(null);
+            return;
+        }
+        const point = pointerFraction(clientX, clientY);
+        setHovered(sectionAt(sections, point.x, point.y));
+    }
 
     function pickColorAt(clientX: number, clientY: number) {
         const point = pointerFraction(clientX, clientY);
@@ -142,16 +165,37 @@ export default function PagePreview({ page, config, showHeader, picking, onBoxCh
     return (
         <div
             ref={wrapRef}
-            className={`paper${picking ? " picking" : ""}`}
+            className={`paper${picking ? " picking" : selectMode === "section" ? " selecting" : ""}`}
+            onPointerMove={(event) => hoverSection(event.clientX, event.clientY)}
+            onPointerLeave={() => setHovered(null)}
             onPointerDown={(event) => {
                 if (picking) {
                     pickColorAt(event.clientX, event.clientY);
+                    return;
+                }
+                if (selectMode === "section") {
+                    const point = pointerFraction(event.clientX, event.clientY);
+                    const section = sectionAt(sections, point.x, point.y);
+                    if (section) onBoxChange(section.box);
                     return;
                 }
                 startDrag(event, { type: "draw" });
             }}
         >
             <canvas ref={canvasRef} />
+            {hovered && (
+                <div
+                    className="section-hint"
+                    style={{
+                        left: `${hovered.box.x * 100}%`,
+                        top: `${hovered.box.y * 100}%`,
+                        width: `${hovered.box.w * 100}%`,
+                        height: `${hovered.box.h * 100}%`,
+                    }}
+                >
+                    <span className="section-hint-tag">{hovered.label}</span>
+                </div>
+            )}
             {!picking && (
                 <div
                     className="selection"

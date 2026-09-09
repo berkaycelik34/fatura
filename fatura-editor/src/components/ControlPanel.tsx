@@ -1,12 +1,15 @@
 import { useMemo, type ChangeEvent } from "react";
 import type { PdfMode } from "../lib/exportPdf";
-import type { Align, HeaderConfig, LogoPosition } from "../lib/types";
+import { FONTS } from "../lib/fonts";
+import type { Section } from "../lib/sections";
+import type { Align, Box, HeaderConfig, LogoPosition } from "../lib/types";
 import {
     CropIcon,
     DropperIcon,
     ImageIcon,
     InvoiceIcon,
     LayersIcon,
+    AlertIcon,
     PagesIcon,
     ResetIcon,
     SparkIcon,
@@ -26,6 +29,10 @@ interface Props {
     pageCount: number;
     firstPageOnly: boolean;
     onFirstPageOnlyChange: (value: boolean) => void;
+    sections: Section[];
+    selectMode: "section" | "free";
+    onSelectModeChange: (mode: "section" | "free") => void;
+    onPickSection: (box: Box) => void;
 }
 
 interface SliderProps {
@@ -85,6 +92,10 @@ export default function ControlPanel({
     pageCount,
     firstPageOnly,
     onFirstPageOnlyChange,
+    sections,
+    selectMode,
+    onSelectModeChange,
+    onPickSection,
 }: Props) {
     const logoUrl = useMemo(() => config.logo?.previewUrl ?? null, [config.logo]);
 
@@ -95,6 +106,67 @@ export default function ControlPanel({
 
     return (
         <div className="panel">
+            <section className="card">
+                <div className="card-head">
+                    <CropIcon />
+                    <h2>Bölüm seçimi</h2>
+                </div>
+                <div className="seg">
+                    <button
+                        type="button"
+                        className={selectMode === "section" ? "active" : ""}
+                        disabled={sections.length === 0}
+                        onClick={() => onSelectModeChange("section")}
+                    >
+                        Bölüm seç
+                    </button>
+                    <button
+                        type="button"
+                        className={selectMode === "free" ? "active" : ""}
+                        onClick={() => onSelectModeChange("free")}
+                    >
+                        Serbest çiz
+                    </button>
+                </div>
+                {sections.length === 0 ? (
+                    <div className="mode-note warn">
+                        <AlertIcon />
+                        <p className="hint">
+                            Bu faturada otomatik bölüm bulunamadı. Alanı fatura üzerinde sürükleyerek kendiniz
+                            çizebilirsiniz — sonuç aynı şekilde çalışır.
+                        </p>
+                    </div>
+                ) : selectMode === "section" ? (
+                    <>
+                        <p className="hint">
+                            Fatura üzerinde imleci gezdirin; algılanan bölüm çerçevelenir, tıklayınca seçilir.
+                            {sections.length} bölüm bulundu.
+                        </p>
+                        <div className="section-list">
+                            {sections.map((section, index) => (
+                                <button
+                                    key={`${section.box.x}-${section.box.y}-${index}`}
+                                    type="button"
+                                    className="section-item"
+                                    onClick={() => onPickSection(section.box)}
+                                    title={section.label}
+                                >
+                                    <span className="section-item-label">{section.label}</span>
+                                    <span className="section-item-size num">
+                                        {Math.round(section.box.w * 100)}×{Math.round(section.box.h * 100)}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                ) : (
+                    <p className="hint">
+                        Fatura üzerinde sürükleyerek alanı kendiniz çizin. Algılanan bölümlere dönmek için "Bölüm seç"e
+                        geçin.
+                    </p>
+                )}
+            </section>
+
             <section className="card">
                 <div className="card-head">
                     <InvoiceIcon />
@@ -235,6 +307,19 @@ export default function ControlPanel({
                         </button>
                     ))}
                 </div>
+                <label className="field">
+                    <span className="field-label">Yazı tipi</span>
+                    <select
+                        value={config.font}
+                        onChange={(event) => onChange({ font: event.target.value as HeaderConfig["font"] })}
+                    >
+                        {FONTS.map((font) => (
+                            <option key={font.id} value={font.id}>
+                                {font.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
                 <Switch label="Firma adı kalın" checked={config.bold} onChange={(bold) => onChange({ bold })} />
                 <Slider
                     label="Firma adı boyutu"

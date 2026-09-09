@@ -11,11 +11,39 @@ ya da geçmiş tutulmaz. Böylece her fatura için farklı firma/logo kullanabil
 
 1. Şifreyi girin (varsayılan: `1234567890`).
 2. Faturayı sürükleyip bırakın veya seçin — PDF, PNG ve JPG desteklenir.
-3. Fatura üzerinde sürükleyerek değiştirilecek alanı çizin, köşelerden boyutlandırın,
-   ortasından tutup taşıyın. Başlangıçta alan zaten sol üsttedir.
+3. Değiştirilecek alanı seçin:
+    - **Bölüm seç** (varsayılan): imleci fatura üzerinde gezdirin, algılanan bölüm
+      çerçevelenir, tıklayınca seçilir. Sağdaki listeden adıyla da seçebilirsiniz.
+    - **Serbest çiz**: alanı sürükleyerek kendiniz çizin.
+      Her iki durumda da köşelerden boyutlandırıp ortasından tutup taşıyabilirsiniz.
 4. Sağdaki panelden firma adını, adres/iletişim satırlarını ve logoyu girin.
    Arka plan rengini faturadan damlalıkla alabilirsiniz ("Faturadan renk al").
 5. **PDF indir** ile çıktıyı alın. **PNG** ilk sayfayı görüntü olarak verir.
+
+## Bölüm algılama
+
+Fatura yüklendiğinde, sayfanın kendi içeriği çözümlenerek mantıksal bölümler
+çıkarılır: yatay çizgiler bulunur, çizgiler arasındaki yazı blokları gruplanır
+ve bunlar sütunlara ayrılır. Böylece "üstünde ve altında çizgi olan alıcı/adres
+bloğu" gibi alanlar tek tıkla seçilebilir.
+
+Algılama sabit koordinatlara dayanmaz; her faturayı kendi ölçeğinde inceler ve
+sonuçları sayfa oranı olarak tutar. Bu yüzden bölümün boyutu, yeri ya da
+sayfanın ölçüsü faturadan faturaya değişse de bulunur. Bölümler ayrıca
+metin katmanından adlandırılır (örn. alıcı bloğu, satıcı bilgileri).
+
+Bir faturada hiç bölüm bulunamazsa uyarı gösterilir ve doğrudan serbest çizime
+geçilir — sonuç aynı şekilde çalışır.
+
+## Yazı tipi
+
+Başlıkta iki yazı tipinden birini seçebilirsiniz:
+
+- **Modern** (Inter): arayüzdeki yazı tipi, ferah ve çağdaş durur.
+- **Nötr** (Roboto): klasik fatura çıktılarına daha yakın.
+
+İkisi de Türkçe karakterlerin tümünü kapsar ve PDF'e gömülür; önizleme ile çıktı
+birebir aynı görünür.
 
 ## Çok sayfalı faturalar
 
