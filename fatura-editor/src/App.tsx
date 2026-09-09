@@ -1,15 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import ControlPanel from "./components/ControlPanel";
-import {
-    AlertIcon,
-    ChevronLeftIcon,
-    ChevronRightIcon,
-    DownloadIcon,
-    ImageIcon,
-    InvoiceIcon,
-    ResetIcon,
-    UploadIcon,
-} from "./components/Icon";
+import { AlertIcon, DownloadIcon, ImageIcon, InvoiceIcon, ResetIcon, UploadIcon } from "./components/Icon";
 import PagePreview from "./components/PagePreview";
 import PasswordGate from "./components/PasswordGate";
 import { composePage } from "./lib/canvasDraw";
@@ -17,8 +8,6 @@ import { exportPdf, type PdfMode } from "./lib/exportPdf";
 import { loadFonts } from "./lib/fonts";
 import { loadDocument, loadLogo } from "./lib/loadDocument";
 import { defaultHeaderConfig, type Box, type HeaderConfig, type LoadedDocument } from "./lib/types";
-
-type Scope = "current" | "all";
 
 function download(blob: Blob, fileName: string) {
     const url = URL.createObjectURL(blob);
@@ -36,15 +25,15 @@ function baseName(fileName: string): string {
 export default function App() {
     const [unlocked, setUnlocked] = useState(false);
     const [doc, setDoc] = useState<LoadedDocument | null>(null);
-    const [pageIndex, setPageIndex] = useState(0);
     const [config, setConfig] = useState<HeaderConfig>(defaultHeaderConfig);
-    const [scope, setScope] = useState<Scope>("current");
+    const [firstPageOnly, setFirstPageOnly] = useState(false);
     const [pdfMode, setPdfMode] = useState<PdfMode>("vector");
     const [picking, setPicking] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [fontsReady, setFontsReady] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const docRef = useRef<LoadedDocument | null>(null);
 
     useEffect(() => {
         loadFonts().then(
@@ -65,8 +54,9 @@ export default function App() {
         setError(null);
         try {
             const loaded = await loadDocument(file);
+            docRef.current?.destroy();
+            docRef.current = loaded;
             setDoc(loaded);
-            setPageIndex(0);
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "Dosya açılamadı.");
         } finally {
@@ -90,14 +80,16 @@ export default function App() {
         }
     }
 
+    // Başlık, tüm sayfalarda aynı alana uygulanır; istenirse sadece ilk sayfaya.
     const targetPages = useMemo(() => {
         if (!doc) return [];
-        return scope === "all" ? doc.pages.map((_, index) => index) : [pageIndex];
-    }, [doc, scope, pageIndex]);
+        if (firstPageOnly) return [0];
+        return Array.from({ length: doc.pageCount }, (_, index) => index);
+    }, [doc, firstPageOnly]);
 
     async function downloadPdf() {
         if (!doc) return;
-        setBusy("PDF hazırlanıyor…");
+        setBusy(targetPages.length > 1 ? `PDF hazırlanıyor… (${targetPages.length} sayfa)` : "PDF hazırlanıyor…");
         setError(null);
         try {
             const blob = await exportPdf(doc, config, targetPages, pdfMode);
@@ -111,9 +103,9 @@ export default function App() {
 
     function downloadPng() {
         if (!doc) return;
-        const canvas = composePage(doc.pages[pageIndex].canvas, config, targetPages.includes(pageIndex));
+        const canvas = composePage(doc.first.canvas, config, true);
         canvas.toBlob((blob) => {
-            if (blob) download(blob, `${baseName(doc.fileName)}-sayfa-${pageIndex + 1}.png`);
+            if (blob) download(blob, `${baseName(doc.fileName)}-sayfa-1.png`);
         }, "image/png");
     }
 
@@ -130,7 +122,14 @@ export default function App() {
 
     if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />;
 
-    const page = doc?.pages[pageIndex];
+    const pageNote =
+        doc === null
+            ? "Başlamak için fatura yükleyin"
+            : doc.pageCount === 1
+              ? `${doc.fileName} · 1 sayfa`
+              : firstPageOnly
+                ? `${doc.fileName} · ${doc.pageCount} sayfa · sadece 1. sayfa`
+                : `${doc.fileName} · ${doc.pageCount} sayfanın tümüne uygulanır`;
 
     return (
         <div className="app">
@@ -141,9 +140,7 @@ export default function App() {
                     </span>
                     <span className="brand-text">
                         <strong>Fatura Başlık Düzenleyici</strong>
-                        <span className="doc-chip">
-                            {doc ? `${doc.fileName} · ${doc.pages.length} sayfa` : "Başlamak için fatura yükleyin"}
-                        </span>
+                        <span className="doc-chip">{pageNote}</span>
                     </span>
                 </div>
                 <div className="row">
@@ -236,48 +233,17 @@ export default function App() {
             ) : (
                 <main className="workspace">
                     <div className="stage">
-                        {doc.pages.length > 1 && (
-                            <div className="pager">
-                                <button
-                                    type="button"
-                                    className="btn btn-quiet btn-icon"
-                                    aria-label="Önceki sayfa"
-                                    disabled={pageIndex === 0}
-                                    onClick={() => setPageIndex((index) => index - 1)}
-                                >
-                                    <ChevronLeftIcon />
-                                </button>
-                                <span className="pager-count num">
-                                    Sayfa {pageIndex + 1} / {doc.pages.length}
-                                </span>
-                                <button
-                                    type="button"
-                                    className="btn btn-quiet btn-icon"
-                                    aria-label="Sonraki sayfa"
-                                    disabled={pageIndex === doc.pages.length - 1}
-                                    onClick={() => setPageIndex((index) => index + 1)}
-                                >
-                                    <ChevronRightIcon />
-                                </button>
-                                <select value={scope} onChange={(event) => setScope(event.target.value as Scope)}>
-                                    <option value="current">Sadece bu sayfaya uygula</option>
-                                    <option value="all">Tüm sayfalara uygula</option>
-                                </select>
-                            </div>
-                        )}
-                        {page && (
-                            <PagePreview
-                                page={page}
-                                config={config}
-                                showHeader={targetPages.includes(pageIndex)}
-                                picking={picking}
-                                onBoxChange={setBox}
-                                onPickColor={(hex) => {
-                                    patchConfig({ background: hex, transparentBackground: false });
-                                    setPicking(false);
-                                }}
-                            />
-                        )}
+                        <PagePreview
+                            page={doc.first}
+                            config={config}
+                            showHeader
+                            picking={picking}
+                            onBoxChange={setBox}
+                            onPickColor={(hex) => {
+                                patchConfig({ background: hex, transparentBackground: false });
+                                setPicking(false);
+                            }}
+                        />
                     </div>
                     <aside className="sidebar">
                         <ControlPanel
@@ -289,6 +255,9 @@ export default function App() {
                             onTogglePicking={() => setPicking((value) => !value)}
                             pdfMode={pdfMode}
                             onPdfModeChange={setPdfMode}
+                            pageCount={doc.pageCount}
+                            firstPageOnly={firstPageOnly}
+                            onFirstPageOnlyChange={setFirstPageOnly}
                         />
                     </aside>
                 </main>

@@ -178,7 +178,7 @@ export async function exportPdf(
                 output.addPage(copied);
                 continue;
             }
-            const rendered = doc.pages[index];
+            const rendered = await doc.renderPage(index);
             const image = await output.embedPng(await canvasToPngBytes(rendered.canvas));
             const size = pageViewSize(rendered);
             const page = output.addPage([size.width, size.height]);
@@ -193,7 +193,7 @@ export async function exportPdf(
     pdfDoc.registerFontkit(fontkit);
     const ctx = await buildContext(pdfDoc, cfg);
 
-    const source = doc.pages[0];
+    const source = doc.first;
     const isJpg = /\.jpe?g$/i.test(doc.fileName);
     const image = isJpg ? await pdfDoc.embedJpg(doc.bytes.slice()) : await pdfDoc.embedPng(doc.bytes.slice());
 

@@ -7,6 +7,7 @@ import {
     ImageIcon,
     InvoiceIcon,
     LayersIcon,
+    PagesIcon,
     ResetIcon,
     SparkIcon,
     TrashIcon,
@@ -22,6 +23,9 @@ interface Props {
     onTogglePicking: () => void;
     pdfMode: PdfMode;
     onPdfModeChange: (mode: PdfMode) => void;
+    pageCount: number;
+    firstPageOnly: boolean;
+    onFirstPageOnlyChange: (value: boolean) => void;
 }
 
 interface SliderProps {
@@ -78,6 +82,9 @@ export default function ControlPanel({
     onTogglePicking,
     pdfMode,
     onPdfModeChange,
+    pageCount,
+    firstPageOnly,
+    onFirstPageOnlyChange,
 }: Props) {
     const logoUrl = useMemo(() => config.logo?.previewUrl ?? null, [config.logo]);
 
@@ -263,6 +270,24 @@ export default function ControlPanel({
                     onChange={(padding) => onChange({ padding })}
                 />
             </section>
+
+            {pageCount > 1 && (
+                <section className="card">
+                    <div className="card-head">
+                        <PagesIcon />
+                        <h2>Sayfalar</h2>
+                    </div>
+                    <p className="hint">
+                        Bu fatura {pageCount} sayfa. Yeni başlık, her sayfada aynı alana tek seferde uygulanır;
+                        önizlemede ilk sayfayı görüyorsunuz.
+                    </p>
+                    <Switch
+                        label="Sadece ilk sayfaya uygula"
+                        checked={firstPageOnly}
+                        onChange={onFirstPageOnlyChange}
+                    />
+                </section>
+            )}
 
             <section className="card">
                 <div className="card-head">

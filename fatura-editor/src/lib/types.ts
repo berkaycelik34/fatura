@@ -56,7 +56,13 @@ export interface LoadedDocument {
     fileName: string;
     /** Orijinal dosya baytları; PDF çıktısı bunun üzerine çizilir. */
     bytes: Uint8Array;
-    pages: RenderedPage[];
+    pageCount: number;
+    /** Önizlemede gösterilen ilk sayfa. */
+    first: RenderedPage;
+    /** İstenen sayfayı çizer (düzleştirme modunda gerekir); sonuç önbelleğe alınır. */
+    renderPage: (index: number) => Promise<RenderedPage>;
+    /** Belge kapatılırken pdf.js kaynaklarını serbest bırakır. */
+    destroy: () => void;
 }
 
 export const defaultHeaderConfig = (): HeaderConfig => ({
