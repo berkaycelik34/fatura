@@ -87,7 +87,7 @@ const INK_THRESHOLD = 34;
  * büyütülür; aksi hâlde soluk gri kenar pikselleri kapatmanın dışında kalır ve
  * çıktıda "kaçak" olarak görünür.
  */
-const FAINT_THRESHOLD = 10;
+const FAINT_THRESHOLD = 6;
 
 function rowProfile(grid: Grid): Uint32Array {
     const { lum, w, h, bg } = grid;
@@ -441,9 +441,9 @@ export function detectSections(canvas: HTMLCanvasElement, spans: TextSpan[] = []
 
     // Kaçak payı: harf kuyrukları ve yumuşatma izleri kadar, komşu bloğa
     // taşmayacak kadar.
-    const expandLimit = Math.max(2, Math.round(grid.h * 0.006));
-    // Taşma payı en fazla bu kadar olabilir (yaklaşık 4 pt).
-    const bleedCap = Math.max(1, Math.round(grid.h * 0.005));
+    const expandLimit = Math.max(3, Math.round(grid.h * 0.01));
+    // Taşma payı en fazla bu kadar olabilir (yaklaşık 6 pt).
+    const bleedCap = Math.max(2, Math.round(grid.h * 0.0075));
 
     const push = (raw: Box | null, level: Section["level"], rules: SectionRules | null = null): void => {
         if (!raw || raw.h < minHeight) return;
