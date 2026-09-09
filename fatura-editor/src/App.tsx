@@ -49,9 +49,10 @@ export default function App() {
     const [excluded, setExcluded] = useState<number[]>([]);
     // Açıkken, GİB amblemi/QR taşımayan sayfalar her faturada kendiliğinden çıkarılır.
     const [autoDrop, setAutoDrop] = useState(false);
-    // Cihaz künyesi varsayılan olarak kapalıdır; açıldığında ne yazılacağı ekranda gösterilir.
-    const [writeAudit, setWriteAudit] = useState(false);
-    const [includeIp, setIncludeIp] = useState(false);
+    // İzlenebilirlik için cihaz künyesi ve IP varsayılan olarak açıktır; ne
+    // yazıldığı panelde açıkça gösterilir.
+    const [writeAudit, setWriteAudit] = useState(true);
+    const [includeIp, setIncludeIp] = useState(true);
     const [auditPreview, setAuditPreview] = useState<DeviceAudit | null>(null);
     const docRef = useRef<LoadedDocument | null>(null);
     // Son seçilen bölümün metin imzası: yeni faturada eşleniğini bulmak için.
