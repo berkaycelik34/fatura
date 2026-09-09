@@ -15,10 +15,17 @@ ya da geçmiş tutulmaz. Böylece her fatura için farklı firma/logo kullanabil
    ortasından tutup taşıyın. Başlangıçta alan zaten sol üsttedir.
 4. Sağdaki panelden firma adını, adres/iletişim satırlarını ve logoyu girin.
    Arka plan rengini faturadan damlalıkla alabilirsiniz ("Faturadan renk al").
-5. **PDF indir** (veya **PNG indir**) ile çıktıyı alın.
+5. **PDF indir** ile çıktıyı alın. **PNG** ilk sayfayı görüntü olarak verir.
 
-Çok sayfalı faturalarda başlığın sadece görüntülenen sayfaya mı yoksa tüm
-sayfalara mı uygulanacağını seçebilirsiniz.
+## Çok sayfalı faturalar
+
+Yeni başlık, tüm sayfalara tek seferde aynı alana uygulanır. Önizlemede yalnızca
+ilk sayfayı görürsünüz; seçtiğiniz alan ve girdiğiniz bilgiler diğer sayfalarda
+da aynı yere yerleşir. Sadece ilk sayfanın değişmesini isterseniz "Sayfalar"
+kartındaki anahtarı açın.
+
+Kalın faturalar anında açılır: önizleme için yalnızca ilk sayfa çizilir, diğer
+sayfalar gerektiğinde işlenir.
 
 ## PDF çıktı modları
 

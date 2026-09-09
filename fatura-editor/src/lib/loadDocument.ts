@@ -8,13 +8,43 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 const TARGET_WIDTH = 1600;
 const MAX_SCALE = 4;
 
-async function renderPdf(bytes: Uint8Array): Promise<RenderedPage[]> {
+export function loadImageElement(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Görsel okunamadı."));
+        image.src = src;
+    });
+}
+
+async function renderImage(bytes: Uint8Array, type: string): Promise<RenderedPage> {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+    try {
+        const image = await loadImageElement(url);
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas oluşturulamadı.");
+        ctx.drawImage(image, 0, 0);
+        return { canvas, widthPt: image.naturalWidth, heightPt: image.naturalHeight, rotation: 0 };
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+async function loadPdf(file: File, bytes: Uint8Array): Promise<LoadedDocument> {
     // pdf.js verilen tamponu devralır; orijinal baytları çıktı için saklıyoruz.
     const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
-    const pages: RenderedPage[] = [];
+    const cache = new Map<number, RenderedPage>();
 
-    for (let index = 1; index <= doc.numPages; index += 1) {
-        const page = await doc.getPage(index);
+    // Sayfalar istendiğinde çizilir: önizleme için sadece ilk sayfa yeterli,
+    // böylece kalın faturalar da anında açılır.
+    const renderPage = async (index: number): Promise<RenderedPage> => {
+        const cached = cache.get(index);
+        if (cached) return cached;
+
+        const page = await doc.getPage(index + 1);
         const base = page.getViewport({ scale: 1 });
         const scale = Math.min(MAX_SCALE, Math.max(1, TARGET_WIDTH / base.width));
         const viewport = page.getViewport({ scale });
@@ -26,55 +56,44 @@ async function renderPdf(bytes: Uint8Array): Promise<RenderedPage[]> {
         if (!ctx) throw new Error("Canvas oluşturulamadı.");
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        pages.push({
+        const rendered: RenderedPage = {
             canvas,
             widthPt: base.width,
             heightPt: base.height,
             rotation: ((page.rotate % 360) + 360) % 360,
-        });
-    }
+        };
+        cache.set(index, rendered);
+        return rendered;
+    };
 
-    await doc.destroy();
-    return pages;
-}
-
-export function loadImageElement(src: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error("Görsel okunamadı."));
-        image.src = src;
-    });
-}
-
-async function renderImage(bytes: Uint8Array, type: string): Promise<RenderedPage[]> {
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
-    try {
-        const image = await loadImageElement(url);
-        const canvas = document.createElement("canvas");
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Canvas oluşturulamadı.");
-        ctx.drawImage(image, 0, 0);
-        return [{ canvas, widthPt: image.naturalWidth, heightPt: image.naturalHeight, rotation: 0 }];
-    } finally {
-        URL.revokeObjectURL(url);
-    }
+    return {
+        kind: "pdf",
+        fileName: file.name,
+        bytes,
+        pageCount: doc.numPages,
+        first: await renderPage(0),
+        renderPage,
+        destroy: () => {
+            cache.clear();
+            void doc.destroy();
+        },
+    };
 }
 
 export async function loadDocument(file: File): Promise<LoadedDocument> {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (isPdf) return loadPdf(file, bytes);
 
-    if (isPdf) {
-        return { kind: "pdf", fileName: file.name, bytes, pages: await renderPdf(bytes) };
-    }
+    const first = await renderImage(bytes, file.type || "image/png");
     return {
         kind: "image",
         fileName: file.name,
         bytes,
-        pages: await renderImage(bytes, file.type || "image/png"),
+        pageCount: 1,
+        first,
+        renderPage: async () => first,
+        destroy: () => {},
     };
 }
 

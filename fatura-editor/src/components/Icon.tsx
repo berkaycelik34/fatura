@@ -127,6 +127,15 @@ export function TrashIcon(props: Props) {
     );
 }
 
+export function PagesIcon(props: Props) {
+    return (
+        <Base {...props}>
+            <rect x="8" y="3.5" width="11.5" height="14" rx="2" />
+            <path d="M15.5 20.5H6.5a2 2 0 0 1-2-2V7" />
+        </Base>
+    );
+}
+
 export function ChevronLeftIcon(props: Props) {
     return (
         <Base {...props}>
