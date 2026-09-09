@@ -52,6 +52,26 @@ bir yerine kaymış olsa da metni aynı olduğu için bulunur. Müşteri bloğu 
 faturada değişen alanlar eşleşmez — bu istenen davranıştır, o bölümü yeniden
 seçersiniz.
 
+## Kaçak önleme ve punto ölçüsü
+
+Kapatılan alanın kenarında eski yazıdan iz kalmaması ("kaçak") için iki ölçüm
+yapılır:
+
+1. **Kenar izi genişletmesi** — algılanan kutu, komşu şeritte yalnızca _soluk_
+   mürekkep (harf kuyruğu, yumuşatma izi) kaldığı sürece dışa büyütülür. Güçlü
+   mürekkep görülürse büyüme hemen durur, yani yandaki tabloya veya yazıya
+   taşınmaz.
+2. **Otomatik taşma payı** — kutunun dört yönünde komşu içeriğe kadar olan
+   boşluk ölçülür ve kapatma dikdörtgeni bu kadar (en fazla ~4 pt) dışa
+   taşırılır. Böylece kenarda iz kalmaz, komşu içerik de örtülmez. Panelden
+   ("Kapatma taşma payı") elle de ayarlanabilir.
+
+Yazı boyutları **sayfa yüksekliğine** oranlıdır, seçilen kutuya değil: büyük bir
+alan seçmek yazıyı devasa yapmaz. Bir bölüm seçtiğinizde uygulama o bölümdeki
+**özgün yazının puntosunu ölçer** ve yeni başlığı aynı ölçüye kurar (firma adı
+bir tık büyük). Artan yer, yazı gerilmeden boş bırakılır. Panelde tüm ölçüler
+punto (pt) olarak gösterilir.
+
 ## Yazı tipleri
 
 Başlık için beş yazı tipi vardır; hepsi Türkçe karakterlerin tümünü kapsar,
@@ -124,6 +144,27 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # dist/
 ```
+
+## Belge künyesi (isteğe bağlı)
+
+PDF'te EXIF yoktur; karşılığı belge künyesidir. "Çıktı" sekmesindeki
+**Düzenleyen cihazın künyesini yaz** anahtarı açılırsa, düzenlemeyi yapan
+cihazın bilgileri PDF'in künyesine (Creator/Producer/Subject/Keywords) yazılır:
+tarih, saat dilimi, dil, işletim sistemi ve sürümü, cihaz modeli, mimari, CPU
+çekirdek sayısı, bellek ipucu, ekran çözünürlüğü ve tarayıcı bilgisi.
+
+- Anahtar **varsayılan olarak kapalıdır** ve kapalıyken orijinal PDF'in künyesi
+  olduğu gibi korunur.
+- Açıkken, yazılacak satırların tamamı indirmeden önce panelde gösterilir.
+- Bu bilgiler gizli değildir: her PDF okuyucunun "belge özellikleri" ekranında
+  görünür, yani dosyayı alan herkes okuyabilir.
+- **Genel IP adresini de ekle** ayrı bir anahtardır. IP tarayıcıda bilinmediği
+  için `api.ipify.org` adresine istek gönderilir; bu anahtar açıkken "hiçbir
+  veri cihazınızdan çıkmaz" garantisi geçerli değildir.
+
+Tarayıcı; donanım seri numarası, MAC adresi veya disk kimliği vermez. Cihaz
+modeli yalnızca bazı platformlarda (ör. Android) bildirilir, masaüstünde boş
+kalır.
 
 ## Vercel'e yükleme
 

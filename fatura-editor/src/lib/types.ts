@@ -23,8 +23,11 @@ export interface Logo {
 }
 
 /**
- * Başlığın tüm ayarları. Ölçüler kutu yüksekliğine oranlıdır; böylece kutu
- * boyutu değişse de yerleşim aynı kalır ve her fatura ölçeğinde aynı görünür.
+ * Başlığın tüm ayarları.
+ *
+ * Yazı boyutları ve boşluklar **sayfa yüksekliğine** oranlıdır, kutuya değil:
+ * böylece büyük bir alan seçmek yazıyı devasa yapmaz, artan yer boş kalır.
+ * Sayfa ölçeğine bağlı olduğu için de her faturada aynı puntoda görünür.
  */
 export interface HeaderConfig {
     // İçerik
@@ -34,6 +37,12 @@ export interface HeaderConfig {
 
     // Konum
     box: Box;
+    /**
+     * Kapatma dikdörtgeninin kutudan dışa taşma payı (sayfa yüksekliğine oran).
+     * Eski yazının kenar pikselleri "kaçak" olarak görünmesin diye vardır;
+     * yazının yerleşimini etkilemez.
+     */
+    bleed: number;
     padding: number;
     align: Align;
     verticalAlign: VerticalAlign;
@@ -63,7 +72,7 @@ export interface HeaderConfig {
     // Bloğu çerçeveleyen yatay çizgiler
     ruleTop: boolean;
     ruleBottom: boolean;
-    /** Kutu yüksekliğine oranla çizgi kalınlığı. */
+    /** Sayfa yüksekliğine oranla çizgi kalınlığı. */
     ruleThickness: number;
     ruleColor: string;
     /** Çizgilerin yanlardan boşluğu (kutu genişliğine oran). */
@@ -124,26 +133,27 @@ export const defaultHeaderConfig = (): HeaderConfig => ({
     logo: null,
 
     box: { x: 0.04, y: 0.03, w: 0.46, h: 0.13 },
-    padding: 0.08,
+    bleed: 0.0025,
+    padding: 0.007,
     align: "left",
-    verticalAlign: "middle",
+    verticalAlign: "top",
     logoPosition: "left",
     logoScale: 0.3,
-    logoGap: 0.06,
+    logoGap: 0.008,
     logoOffsetX: 0,
     logoOffsetY: 0,
     textOffsetX: 0,
     textOffsetY: 0,
 
     font: "inter",
-    nameSize: 0.22,
+    nameSize: 0.017,
     nameBold: true,
     nameUppercase: false,
     nameSpacing: 0,
     nameColor: "#111111",
-    nameGap: 0.04,
-    lineSize: 0.14,
-    lineGap: 1.3,
+    nameGap: 0.004,
+    lineSize: 0.0125,
+    lineGap: 1.35,
     lineSpacing: 0,
     textColor: "#111111",
     background: "#ffffff",
@@ -151,7 +161,7 @@ export const defaultHeaderConfig = (): HeaderConfig => ({
 
     ruleTop: false,
     ruleBottom: false,
-    ruleThickness: 0.012,
+    ruleThickness: 0.0012,
     ruleColor: "#111111",
     ruleInset: 0,
 });
