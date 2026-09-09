@@ -16,6 +16,16 @@ export interface Section {
     /** "block": üstünde/altında çizgi olan tam blok, "group": tek bir satır kümesi. */
     level: "block" | "group";
     rules: SectionRules | null;
+    /**
+     * Bölümdeki özgün yazının tipik boyu (sayfa yüksekliğine oran). Yeni başlık
+     * bu ölçüye eşitlenir, böylece punto faturanın kendi puntosuyla uyuşur.
+     */
+    textHeight: number;
+    /**
+     * Komşu içeriğe dokunmadan kapatma alanının dışa taşabileceği pay
+     * (sayfa yüksekliğine oran).
+     */
+    safeBleed: number;
 }
 
 /** Çözümleme bu genişliğe küçültülerek yapılır; hız ve tutarlılık için. */
@@ -71,6 +81,13 @@ function toGrid(canvas: HTMLCanvasElement): Grid | null {
 }
 
 const INK_THRESHOLD = 34;
+
+/**
+ * Kenar yumuşatma izleri için daha duyarlı eşik. Bir kutu bu eşikle dışa doğru
+ * büyütülür; aksi hâlde soluk gri kenar pikselleri kapatmanın dışında kalır ve
+ * çıktıda "kaçak" olarak görünür.
+ */
+const FAINT_THRESHOLD = 10;
 
 function rowProfile(grid: Grid): Uint32Array {
     const { lum, w, h, bg } = grid;
@@ -252,6 +269,90 @@ function tighten(grid: Grid, rows: Range, columns: Range): Box | null {
     return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
 }
 
+interface BandInk {
+    faint: boolean;
+    strong: boolean;
+}
+
+function scanBand(grid: Grid, x0: number, x1: number, y0: number, y1: number): BandInk {
+    const { lum, w, h, bg } = grid;
+    const left = Math.max(0, x0);
+    const right = Math.min(w - 1, x1);
+    const top = Math.max(0, y0);
+    const bottom = Math.min(h - 1, y1);
+    const result: BandInk = { faint: false, strong: false };
+    if (left > right || top > bottom) return result;
+
+    for (let y = top; y <= bottom; y += 1) {
+        const base = y * w;
+        for (let x = left; x <= right; x += 1) {
+            const delta = Math.abs(lum[base + x] - bg);
+            if (delta > INK_THRESHOLD) {
+                result.strong = true;
+                return result;
+            }
+            if (delta > FAINT_THRESHOLD) result.faint = true;
+        }
+    }
+    return result;
+}
+
+/**
+ * Yalnızca soluk kenar izi olan şerit: harf kuyruğunun/yumuşatmanın devamıdır,
+ * komşu içerik değildir. Güçlü mürekkep görülürse büyüme durur.
+ */
+function bandIsHalo(grid: Grid, x0: number, x1: number, y0: number, y1: number): boolean {
+    const band = scanBand(grid, x0, x1, y0, y1);
+    return band.faint && !band.strong;
+}
+
+/**
+ * Kutuyu, komşu şeritte mürekkep kalmayana kadar dışa büyütür. Böylece harf
+ * kuyrukları ve yumuşatma izleri kapatmanın içinde kalır; büyüme sınırlıdır ki
+ * komşu blok yutulmasın.
+ */
+function expandForInk(grid: Grid, box: Box, limit: number): Box {
+    let { x, y, w, h } = box;
+
+    for (let step = 0; step < limit && y > 0 && bandIsHalo(grid, x, x + w - 1, y - 1, y - 1); step += 1) {
+        y -= 1;
+        h += 1;
+    }
+    for (let step = 0; step < limit && y + h < grid.h && bandIsHalo(grid, x, x + w - 1, y + h, y + h); step += 1) {
+        h += 1;
+    }
+    for (let step = 0; step < limit && x > 0 && bandIsHalo(grid, x - 1, x - 1, y, y + h - 1); step += 1) {
+        x -= 1;
+        w += 1;
+    }
+    for (let step = 0; step < limit && x + w < grid.w && bandIsHalo(grid, x + w, x + w, y, y + h - 1); step += 1) {
+        w += 1;
+    }
+
+    return { x, y, w, h };
+}
+
+/**
+ * Kutunun her yönünde, komşu içeriğe değmeden ne kadar taşabileceğini ölçer.
+ * Kapatma dikdörtgeni bu kadar dışa taşırılabilir: kaçak kalmaz ama yandaki
+ * tablo ya da yazı da örtülmez.
+ */
+function safeBleed(grid: Grid, box: Box, cap: number): number {
+    const clear = (test: (step: number) => BandInk): number => {
+        for (let step = 1; step <= cap; step += 1) {
+            if (test(step).strong) return step - 1;
+        }
+        return cap;
+    };
+
+    return Math.min(
+        clear((step) => scanBand(grid, box.x, box.x + box.w - 1, box.y - step, box.y - step)),
+        clear((step) => scanBand(grid, box.x, box.x + box.w - 1, box.y + box.h - 1 + step, box.y + box.h - 1 + step)),
+        clear((step) => scanBand(grid, box.x - step, box.x - step, box.y, box.y + box.h - 1)),
+        clear((step) => scanBand(grid, box.x + box.w - 1 + step, box.x + box.w - 1 + step, box.y, box.y + box.h - 1)),
+    );
+}
+
 /** Kutuyu biraz genişletip sayfa oranlarına çevirir. */
 function toFraction(box: Box, grid: Grid): Box {
     const padX = Math.max(2, grid.w * 0.005);
@@ -271,6 +372,24 @@ function overlapRatio(a: Box, b: Box): number {
     if (right <= x || bottom <= y) return 0;
     const overlap = (right - x) * (bottom - y);
     return overlap / (a.w * a.h + b.w * b.h - overlap);
+}
+
+/** Kutunun içindeki yazıların tipik boyu (sayfa oranı). */
+function textHeightIn(box: Box, spans: TextSpan[]): number {
+    const heights = spans
+        .filter(
+            (span) =>
+                span.x + span.w / 2 >= box.x &&
+                span.x + span.w / 2 <= box.x + box.w &&
+                span.y + span.h / 2 >= box.y &&
+                span.y + span.h / 2 <= box.y + box.h &&
+                span.h > 0,
+        )
+        .map((span) => span.h)
+        .sort((a, b) => a - b);
+
+    if (heights.length === 0) return 0;
+    return heights[Math.floor(heights.length / 2)];
 }
 
 /** Kutunun içine düşen ilk yazı satırından bir etiket üretir. */
@@ -312,14 +431,32 @@ export function detectSections(canvas: HTMLCanvasElement, spans: TextSpan[] = []
 
     const minArea = 0.0006;
     const minHeight = Math.max(4, grid.h * 0.004);
-    const candidates: { box: Box; level: Section["level"]; rules: SectionRules | null; area: number }[] = [];
+    const candidates: {
+        box: Box;
+        level: Section["level"];
+        rules: SectionRules | null;
+        safeBleed: number;
+        area: number;
+    }[] = [];
 
-    const push = (box: Box | null, level: Section["level"], rules: SectionRules | null = null): void => {
-        if (!box || box.h < minHeight) return;
+    // Kaçak payı: harf kuyrukları ve yumuşatma izleri kadar, komşu bloğa
+    // taşmayacak kadar.
+    const expandLimit = Math.max(2, Math.round(grid.h * 0.006));
+    // Taşma payı en fazla bu kadar olabilir (yaklaşık 4 pt).
+    const bleedCap = Math.max(1, Math.round(grid.h * 0.005));
+
+    const push = (raw: Box | null, level: Section["level"], rules: SectionRules | null = null): void => {
+        if (!raw || raw.h < minHeight) return;
+        const box = expandForInk(grid, raw, expandLimit);
         const fraction = toFraction(box, grid);
         const area = fraction.w * fraction.h;
         if (area < minArea) return;
-        candidates.push({ box: fraction, level, rules, area });
+        // Çizgili bloklarda çizgi zaten kutunun kenarındadır; taşma payı ölçülürken
+        // kendi çizgisini komşu saymaması için bir piksel içeriden bakılır.
+        const probe = rules
+            ? { x: box.x + 1, y: box.y + 1, w: Math.max(1, box.w - 2), h: Math.max(1, box.h - 2) }
+            : box;
+        candidates.push({ box: fraction, level, rules, safeBleed: safeBleed(grid, probe, bleedCap) / grid.h, area });
     };
 
     // Çizgiler yatay uzanımlarıyla birlikte tutulur: sağdaki bir tablonun kenarı,
@@ -426,7 +563,7 @@ export function detectSections(canvas: HTMLCanvasElement, spans: TextSpan[] = []
                 ? {
                       top: Boolean(above),
                       bottom: Boolean(below),
-                      thickness: Math.max(0.003, thicknessPx / framed.h),
+                      thickness: Math.max(0.0004, thicknessPx / grid.h),
                       color: above?.color ?? below?.color ?? "#111111",
                   }
                 : null,
@@ -435,16 +572,25 @@ export function detectSections(canvas: HTMLCanvasElement, spans: TextSpan[] = []
 
     // Blok seviyesi öncelikli, birbirinin aynısı olanlar teke indirilir.
     const ordered = candidates.sort((a, b) => (a.level === b.level ? b.area - a.area : a.level === "block" ? -1 : 1));
-    const unique: { box: Box; level: Section["level"]; rules: SectionRules | null }[] = [];
+    const unique: { box: Box; level: Section["level"]; rules: SectionRules | null; safeBleed: number }[] = [];
     for (const candidate of ordered) {
         if (unique.some((kept) => overlapRatio(kept.box, candidate.box) > 0.82)) continue;
-        unique.push({ box: candidate.box, level: candidate.level, rules: candidate.rules });
+        unique.push({
+            box: candidate.box,
+            level: candidate.level,
+            rules: candidate.rules,
+            safeBleed: candidate.safeBleed,
+        });
     }
 
     return unique
         .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
         .slice(0, 40)
-        .map((item, index) => ({ ...item, label: labelFor(item.box, spans, index) }));
+        .map((item, index) => ({
+            ...item,
+            label: labelFor(item.box, spans, index),
+            textHeight: textHeightIn(item.box, spans),
+        }));
 }
 
 /** Etiketi karşılaştırılabilir bir imzaya çevirir. */

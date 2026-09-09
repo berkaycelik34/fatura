@@ -22,7 +22,10 @@ export interface TextItem {
 }
 
 export interface HeaderLayout {
+    /** Yazının yerleştiği alan. */
     box: Rect;
+    /** Eski içeriğin kapatıldığı alan: kutu + taşma payı. */
+    cover: Rect;
     fillBackground: boolean;
     logo: Rect | null;
     items: TextItem[];
@@ -69,6 +72,9 @@ function anchor(area: Rect, align: Align): number {
  * Başlık kutusunun yerleşimini hesaplar. Saf bir fonksiyondur: hem ekrandaki
  * önizleme hem de PDF çıktısı bunu kullanır, böylece ikisi birebir aynı olur.
  * Tüm ölçüler piksel/nokta cinsinden, sol-üst köşe orijinlidir.
+ *
+ * Yazı boyutları ve boşluklar sayfa yüksekliğine oranlıdır: seçilen alan büyük
+ * olduğunda yazı büyümez, artan yer boş kalır.
  */
 export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, measure: Measure): HeaderLayout | null {
     const box: Rect = {
@@ -79,8 +85,21 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
     };
     if (box.w <= 0 || box.h <= 0) return null;
 
+    // Kapatma alanı kutudan biraz dışa taşar: eski yazının kenar pikselleri
+    // (yumuşatma izleri) kaçak olarak görünmesin.
+    const bleed = Math.max(0, cfg.bleed * pageH);
+    const cover: Rect = {
+        x: Math.max(0, box.x - bleed),
+        y: Math.max(0, box.y - bleed),
+        w: 0,
+        h: 0,
+    };
+    cover.w = Math.min(pageW, box.x + box.w + bleed) - cover.x;
+    cover.h = Math.min(pageH, box.y + box.h + bleed) - cover.y;
+
     const layout: HeaderLayout = {
         box,
+        cover,
         fillBackground: !cfg.transparentBackground,
         logo: null,
         items: [],
@@ -89,7 +108,7 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
     };
 
     // Çizgiler kutunun üst/alt kenarına oturur; içerik onların arasında kalır.
-    const ruleH = Math.max(0, cfg.ruleThickness * box.h);
+    const ruleH = Math.max(0, cfg.ruleThickness * pageH);
     const inset = cfg.ruleInset * box.w;
     if (cfg.ruleTop && ruleH > 0) {
         layout.rules.push({ x: box.x + inset, y: box.y, w: Math.max(0, box.w - inset * 2), h: ruleH });
@@ -111,14 +130,14 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
     };
     if (content.h <= 0) return layout;
 
-    const pad = cfg.padding * box.h;
+    const pad = cfg.padding * pageH;
     const inner: Rect = { x: content.x + pad, y: content.y + pad, w: content.w - pad * 2, h: content.h - pad * 2 };
     if (inner.w <= 0 || inner.h <= 0) return layout;
 
     let textArea: Rect = inner;
 
     if (cfg.logo && cfg.logoPosition !== "none") {
-        const gap = cfg.logoGap * box.h;
+        const gap = cfg.logoGap * pageH;
         if (cfg.logoPosition === "top") {
             const area: Rect = { x: inner.x, y: inner.y, w: inner.w, h: inner.h * cfg.logoScale };
             const placed = fitLogo(cfg.logo.ratio, area);
@@ -141,14 +160,14 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
             };
         }
 
-        layout.logo.x += cfg.logoOffsetX * box.h;
-        layout.logo.y += cfg.logoOffsetY * box.h;
+        layout.logo.x += cfg.logoOffsetX * pageH;
+        layout.logo.y += cfg.logoOffsetY * pageH;
     }
 
     if (textArea.w <= 0 || textArea.h <= 0) return layout;
     textArea = {
-        x: textArea.x + cfg.textOffsetX * box.h,
-        y: textArea.y + cfg.textOffsetY * box.h,
+        x: textArea.x + cfg.textOffsetX * pageH,
+        y: textArea.y + cfg.textOffsetY * pageH,
         w: textArea.w,
         h: textArea.h,
     };
@@ -156,19 +175,20 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
     const name = cfg.nameUppercase ? cfg.companyName.trim().toLocaleUpperCase("tr") : cfg.companyName.trim();
     const lines = cfg.lines.map((line) => line.trim()).filter((line) => line !== "");
 
-    const nameSpacing = cfg.nameSpacing * box.h;
-    const lineSpacing = cfg.lineSpacing * box.h;
+    const nameSpacing = cfg.nameSpacing * pageH;
+    const lineSpacing = cfg.lineSpacing * pageH;
 
     const nameSize =
-        name === "" ? 0 : shrinkToFit(name, cfg.nameSize * box.h, cfg.nameBold, nameSpacing, textArea.w, measure);
+        name === "" ? 0 : shrinkToFit(name, cfg.nameSize * pageH, cfg.nameBold, nameSpacing, textArea.w, measure);
     const lineSizes = lines.map((line) =>
-        shrinkToFit(line, cfg.lineSize * box.h, false, lineSpacing, textArea.w, measure),
+        shrinkToFit(line, cfg.lineSize * pageH, false, lineSpacing, textArea.w, measure),
     );
 
-    const nameBlock = name === "" ? 0 : nameSize * cfg.lineGap + (lines.length > 0 ? cfg.nameGap * box.h : 0);
+    const nameBlock = name === "" ? 0 : nameSize * cfg.lineGap + (lines.length > 0 ? cfg.nameGap * pageH : 0);
     const rawHeight = nameBlock + lineSizes.reduce((sum, size) => sum + size * cfg.lineGap, 0);
 
-    // Metin kutuya dikey olarak sığmıyorsa tüm blok orantılı küçültülür.
+    // Metin alana dikey olarak sığmıyorsa blok orantılı küçültülür; sığıyorsa
+    // olduğu gibi kalır ve artan yer boş bırakılır.
     const squeeze = rawHeight > textArea.h && rawHeight > 0 ? textArea.h / rawHeight : 1;
     const blockHeight = rawHeight * squeeze;
 
@@ -189,7 +209,7 @@ export function layoutHeader(cfg: HeaderConfig, pageW: number, pageH: number, me
             spacing: nameSpacing * squeeze,
             color: cfg.nameColor,
         });
-        top += size * cfg.lineGap + (lines.length > 0 ? cfg.nameGap * box.h * squeeze : 0);
+        top += size * cfg.lineGap + (lines.length > 0 ? cfg.nameGap * pageH * squeeze : 0);
     }
 
     lines.forEach((line, index) => {

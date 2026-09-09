@@ -1,4 +1,5 @@
 import { useMemo, useState, type ChangeEvent } from "react";
+import { auditLines, IP_SERVICE, type DeviceAudit } from "../lib/deviceAudit";
 import type { PdfMode } from "../lib/exportPdf";
 import { FONTS, fontById } from "../lib/fonts";
 import type { Section } from "../lib/sections";
@@ -15,6 +16,7 @@ import {
     PagesIcon,
     ResetIcon,
     RuleIcon,
+    ShieldIcon,
     SparkIcon,
     TrashIcon,
     TypeIcon,
@@ -45,6 +47,13 @@ interface Props {
     onExcludedChange: (pages: number[]) => void;
     autoDrop: boolean;
     onAutoDropChange: (value: boolean) => void;
+    writeAudit: boolean;
+    onWriteAuditChange: (value: boolean) => void;
+    includeIp: boolean;
+    onIncludeIpChange: (value: boolean) => void;
+    auditPreview: DeviceAudit | null;
+    /** Sayfanın nokta (pt) cinsinden yüksekliği; ölçüleri pt olarak göstermek için. */
+    pagePt: number;
 }
 
 interface SliderProps {
@@ -153,6 +162,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function ControlPanel(props: Props) {
     const { config, onChange, onLogoFile } = props;
+    /** Sayfa oranını, kullanıcının tanıdığı punto değerine çevirir. */
+    const pt = (value: number) => `${(value * props.pagePt).toFixed(1)} pt`;
     const [tab, setTab] = useState<Tab>("content");
     const logoUrl = useMemo(() => config.logo?.previewUrl ?? null, [config.logo]);
     const irrelevant = useMemo(() => props.audit.filter((page) => !page.looksRelevant), [props.audit]);
@@ -440,31 +451,46 @@ export default function ControlPanel(props: Props) {
                             label="İç boşluk"
                             value={config.padding}
                             min={0}
-                            max={0.3}
-                            step={0.005}
+                            max={0.05}
+                            step={0.0005}
+                            display={pt}
                             onChange={(padding) => onChange({ padding })}
                         />
                         <Slider
                             label="Firma adı – adres arası"
                             value={config.nameGap}
                             min={0}
-                            max={0.3}
-                            step={0.005}
+                            max={0.04}
+                            step={0.0005}
+                            display={pt}
                             onChange={(nameGap) => onChange({ nameGap })}
                         />
+                        <Slider
+                            label="Kapatma taşma payı"
+                            value={config.bleed}
+                            min={0}
+                            max={0.02}
+                            step={0.0005}
+                            display={pt}
+                            onChange={(bleed) => onChange({ bleed })}
+                        />
+                        <p className="hint">
+                            Taşma payı, kapatma dikdörtgenini seçili alanın biraz dışına taşırır; eski yazının kenar
+                            izleri kaçak olarak görünmez. Yazının yerleşimini değiştirmez.
+                        </p>
                         <div className="number-grid">
                             <NumberField
                                 label="Yazı ↔"
                                 value={config.textOffsetX}
-                                min={-50}
-                                max={50}
+                                min={-20}
+                                max={20}
                                 onChange={(textOffsetX) => onChange({ textOffsetX })}
                             />
                             <NumberField
                                 label="Yazı ↕"
                                 value={config.textOffsetY}
-                                min={-50}
-                                max={50}
+                                min={-20}
+                                max={20}
                                 onChange={(textOffsetY) => onChange({ textOffsetY })}
                             />
                         </div>
@@ -494,10 +520,10 @@ export default function ControlPanel(props: Props) {
                                 <Slider
                                     label="Kalınlık"
                                     value={config.ruleThickness}
-                                    min={0.002}
-                                    max={0.06}
-                                    step={0.001}
-                                    display={(value) => `${(value * 100).toFixed(1)}%`}
+                                    min={0.0003}
+                                    max={0.008}
+                                    step={0.0001}
+                                    display={pt}
                                     onChange={(ruleThickness) => onChange({ ruleThickness })}
                                 />
                                 <Slider
@@ -548,23 +574,24 @@ export default function ControlPanel(props: Props) {
                                 label="Logo – yazı arası"
                                 value={config.logoGap}
                                 min={0}
-                                max={0.4}
-                                step={0.005}
+                                max={0.05}
+                                step={0.0005}
+                                display={pt}
                                 onChange={(logoGap) => onChange({ logoGap })}
                             />
                             <div className="number-grid">
                                 <NumberField
                                     label="Logo ↔"
                                     value={config.logoOffsetX}
-                                    min={-50}
-                                    max={50}
+                                    min={-20}
+                                    max={20}
                                     onChange={(logoOffsetX) => onChange({ logoOffsetX })}
                                 />
                                 <NumberField
                                     label="Logo ↕"
                                     value={config.logoOffsetY}
-                                    min={-50}
-                                    max={50}
+                                    min={-20}
+                                    max={20}
                                     onChange={(logoOffsetY) => onChange({ logoOffsetY })}
                                 />
                             </div>
@@ -601,18 +628,19 @@ export default function ControlPanel(props: Props) {
                         <Slider
                             label="Boyut"
                             value={config.nameSize}
-                            min={0.05}
-                            max={0.6}
-                            step={0.005}
+                            min={0.005}
+                            max={0.06}
+                            step={0.0005}
+                            display={pt}
                             onChange={(nameSize) => onChange({ nameSize })}
                         />
                         <Slider
                             label="Harf aralığı"
                             value={config.nameSpacing}
-                            min={-0.01}
-                            max={0.06}
-                            step={0.002}
-                            display={(value) => `${(value * 100).toFixed(1)}%`}
+                            min={-0.0006}
+                            max={0.004}
+                            step={0.0001}
+                            display={pt}
                             onChange={(nameSpacing) => onChange({ nameSpacing })}
                         />
                         <Switch
@@ -643,9 +671,10 @@ export default function ControlPanel(props: Props) {
                         <Slider
                             label="Boyut"
                             value={config.lineSize}
-                            min={0.04}
-                            max={0.4}
-                            step={0.005}
+                            min={0.004}
+                            max={0.04}
+                            step={0.0005}
+                            display={pt}
                             onChange={(lineSize) => onChange({ lineSize })}
                         />
                         <Slider
@@ -660,10 +689,10 @@ export default function ControlPanel(props: Props) {
                         <Slider
                             label="Harf aralığı"
                             value={config.lineSpacing}
-                            min={-0.008}
-                            max={0.04}
-                            step={0.002}
-                            display={(value) => `${(value * 100).toFixed(1)}%`}
+                            min={-0.0005}
+                            max={0.003}
+                            step={0.0001}
+                            display={pt}
                             onChange={(lineSpacing) => onChange({ lineSpacing })}
                         />
                         <label className="swatch">
@@ -809,6 +838,52 @@ export default function ControlPanel(props: Props) {
 
                     <section className="card">
                         <div className="card-head">
+                            <ShieldIcon />
+                            <h2>Belge künyesi</h2>
+                        </div>
+                        <p className="hint">
+                            PDF'te EXIF yoktur; bu bilgiler belge künyesine yazılır ve her PDF okuyucunun "belge
+                            özellikleri" ekranında görünür. Gizli değildir — dosyayı alan herkes okuyabilir.
+                        </p>
+                        <Switch
+                            label="Düzenleyen cihazın künyesini yaz"
+                            checked={props.writeAudit}
+                            onChange={props.onWriteAuditChange}
+                        />
+                        {props.writeAudit && (
+                            <>
+                                <Switch
+                                    label="Genel IP adresini de ekle"
+                                    checked={props.includeIp}
+                                    onChange={props.onIncludeIpChange}
+                                />
+                                {props.includeIp && (
+                                    <div className="mode-note warn">
+                                        <AlertIcon />
+                                        <p className="hint">
+                                            IP adresi tarayıcıda bilinmez; <strong>{IP_SERVICE}</strong> adresine istek
+                                            gönderilir. Bu anahtar açıkken "hiçbir veri cihazınızdan çıkmaz" garantisi
+                                            geçerli değildir.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="audit-preview">
+                                    {props.auditPreview ? (
+                                        auditLines(props.auditPreview).map((line) => <span key={line}>{line}</span>)
+                                    ) : (
+                                        <span className="dim">Künye hazırlanıyor…</span>
+                                    )}
+                                </div>
+                                <p className="hint">
+                                    Tarayıcı; donanım seri numarası, MAC adresi veya disk kimliği vermez. Cihaz modeli
+                                    yalnızca bazı platformlarda (ör. Android) bildirilir.
+                                </p>
+                            </>
+                        )}
+                    </section>
+
+                    <section className="card">
+                        <div className="card-head">
                             <DownloadIcon />
                             <h2>Özet</h2>
                         </div>
@@ -834,6 +909,10 @@ export default function ControlPanel(props: Props) {
                             <div>
                                 <dt>Çıkarılan sayfa</dt>
                                 <dd className="num">{props.excluded.length}</dd>
+                            </div>
+                            <div>
+                                <dt>Cihaz künyesi</dt>
+                                <dd>{props.writeAudit ? (props.includeIp ? "IP dahil" : "IP'siz") : "kapalı"}</dd>
                             </div>
                         </dl>
                     </section>

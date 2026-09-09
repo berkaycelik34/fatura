@@ -10,9 +10,12 @@ import {
     type PDFImage,
     type PDFPage,
 } from "pdf-lib";
+import { auditLines, type DeviceAudit } from "./deviceAudit";
 import { fontBytes } from "./fonts";
 import { layoutHeader, type Measure } from "./layout";
 import type { HeaderConfig, LoadedDocument, RenderedPage } from "./types";
+
+const APP_NAME = "Fatura Başlık Düzenleyici";
 
 /**
  * "vector": orijinal PDF olduğu gibi korunur, seçilen alan yeni başlıkla kapatılır.
@@ -77,10 +80,10 @@ function drawHeaderOnPage(page: PDFPage, cfg: HeaderConfig, ctx: DrawContext): v
 
     if (layout.fillBackground) {
         page.drawRectangle({
-            x: layout.box.x,
-            y: viewH - (layout.box.y + layout.box.h),
-            width: layout.box.w,
-            height: layout.box.h,
+            x: layout.cover.x,
+            y: viewH - (layout.cover.y + layout.cover.h),
+            width: layout.cover.w,
+            height: layout.cover.h,
             color: hexToRgb(cfg.background),
         });
     }
@@ -166,6 +169,30 @@ function pageViewSize(page: RenderedPage): { width: number; height: number } {
 }
 
 /**
+ * Cihaz künyesini PDF'in belge bilgilerine yazar. Gizli bir alan değildir:
+ * her PDF görüntüleyicinin "belge özellikleri" ekranında görünür ve dosyayı
+ * alan herkes okuyabilir. Yalnızca kullanıcı bu seçeneği açtığında çağrılır;
+ * kapalıyken belgenin künyesine hiç dokunulmaz.
+ */
+function applyAudit(pdfDoc: PDFDocument, audit: DeviceAudit | null | undefined, isNewDocument = false): void {
+    if (!audit) {
+        // Künye kapalı: yeni oluşturulan belgede yalnızca üreten uygulama yazılır,
+        // orijinal PDF'in künyesine hiç dokunulmaz.
+        if (isNewDocument) {
+            pdfDoc.setProducer(APP_NAME);
+            pdfDoc.setCreator(APP_NAME);
+        }
+        return;
+    }
+    const lines = auditLines(audit);
+    pdfDoc.setProducer(APP_NAME);
+    pdfDoc.setCreator(`${APP_NAME} · ${`${audit.platform} ${audit.osVersion}`.trim()}`);
+    pdfDoc.setSubject(`Düzenleyen cihaz künyesi — ${lines.join(" | ")}`);
+    pdfDoc.setKeywords(lines);
+    pdfDoc.setModificationDate(new Date());
+}
+
+/**
  * Yüklenen belgeyi, sol üstteki başlık değiştirilmiş halde PDF olarak üretir.
  * PDF girdilerinde orijinal dosya yeniden çizilmez; metin ve çizgiler vektörel
  * kalır, sadece seçilen alan yeni başlıkla kapatılır.
@@ -176,6 +203,8 @@ export interface ExportOptions {
     /** Çıktıda kalacak sayfalar; buraya girmeyenler PDF'ten çıkarılır. */
     keepPages: number[];
     mode: PdfMode;
+    /** Verilirse, üreten cihazın künyesi PDF belge bilgilerine yazılır. */
+    audit?: DeviceAudit | null;
 }
 
 export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options: ExportOptions): Promise<Blob> {
@@ -183,7 +212,8 @@ export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options:
     const keep = new Set(options.keepPages);
 
     if (doc.kind === "pdf") {
-        const source = await PDFDocument.load(doc.bytes.slice());
+        // updateMetadata: false — pdf-lib orijinal künyeyi kendi adıyla değiştirmesin.
+        const source = await PDFDocument.load(doc.bytes.slice(), { updateMetadata: false });
 
         if (options.mode === "vector") {
             source.registerFontkit(fontkit);
@@ -198,6 +228,7 @@ export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options:
                 if (!keep.has(index)) source.removePage(index);
             }
 
+            applyAudit(source, options.audit);
             return toBlob(await source.save());
         }
 
@@ -222,6 +253,7 @@ export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options:
             drawHeaderOnPage(page, cfg, ctx);
         }
 
+        applyAudit(output, options.audit, true);
         return toBlob(await output.save());
     }
 
@@ -239,5 +271,6 @@ export async function exportPdf(doc: LoadedDocument, cfg: HeaderConfig, options:
     page.drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
     if (header.has(0)) drawHeaderOnPage(page, cfg, ctx);
 
+    applyAudit(pdfDoc, options.audit, true);
     return toBlob(await pdfDoc.save());
 }

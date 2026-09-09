@@ -4,6 +4,7 @@ import { AlertIcon, DownloadIcon, ImageIcon, InvoiceIcon, ResetIcon, UploadIcon 
 import PagePreview from "./components/PagePreview";
 import PasswordGate from "./components/PasswordGate";
 import { composePage } from "./lib/canvasDraw";
+import { collectDeviceAudit, type DeviceAudit } from "./lib/deviceAudit";
 import { exportPdf, type PdfMode } from "./lib/exportPdf";
 import { ensureFont } from "./lib/fonts";
 import { loadDocument, loadLogo } from "./lib/loadDocument";
@@ -48,6 +49,10 @@ export default function App() {
     const [excluded, setExcluded] = useState<number[]>([]);
     // Açıkken, GİB amblemi/QR taşımayan sayfalar her faturada kendiliğinden çıkarılır.
     const [autoDrop, setAutoDrop] = useState(false);
+    // Cihaz künyesi varsayılan olarak kapalıdır; açıldığında ne yazılacağı ekranda gösterilir.
+    const [writeAudit, setWriteAudit] = useState(false);
+    const [includeIp, setIncludeIp] = useState(false);
+    const [auditPreview, setAuditPreview] = useState<DeviceAudit | null>(null);
     const docRef = useRef<LoadedDocument | null>(null);
     // Son seçilen bölümün metin imzası: yeni faturada eşleniğini bulmak için.
     const signatureRef = useRef<string | null>(null);
@@ -76,7 +81,10 @@ export default function App() {
         [patchConfig],
     );
 
-    /** Bölüm seçilince, o bölümü çerçeveleyen çizgiler de birebir yeniden kurulur. */
+    /**
+     * Bölüm seçilince kutu, çerçeve çizgileri ve punto ölçüsü birlikte kurulur:
+     * yeni başlık, o bölümdeki özgün yazının puntosuyla aynı ölçüde başlar.
+     */
     const applySection = useCallback((section: Section) => {
         setConfig((previous) => ({
             ...previous,
@@ -85,6 +93,9 @@ export default function App() {
             ruleBottom: section.rules?.bottom ?? false,
             ruleThickness: section.rules?.thickness ?? previous.ruleThickness,
             ruleColor: section.rules?.color ?? previous.ruleColor,
+            bleed: section.safeBleed,
+            lineSize: section.textHeight > 0 ? section.textHeight : previous.lineSize,
+            nameSize: section.textHeight > 0 ? section.textHeight * 1.35 : previous.nameSize,
         }));
         setSelected(true);
     }, []);
@@ -182,6 +193,21 @@ export default function App() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [selected, doc]);
 
+    // Anahtar açıkken künye önizlemesi hazırlanır; kapalıyken hiç toplanmaz.
+    useEffect(() => {
+        if (!writeAudit) {
+            setAuditPreview(null);
+            return;
+        }
+        let cancelled = false;
+        void collectDeviceAudit(includeIp).then((info) => {
+            if (!cancelled) setAuditPreview(info);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [writeAudit, includeIp]);
+
     async function handleLogoFile(file: File | null) {
         const previous = config.logo?.previewUrl;
         if (!file) {
@@ -216,10 +242,13 @@ export default function App() {
         setBusy(targetPages.length > 1 ? `PDF hazırlanıyor… (${targetPages.length} sayfa)` : "PDF hazırlanıyor…");
         setError(null);
         try {
+            // Künye, indirme anında yeniden toplanır ki tarih/IP güncel olsun.
+            const audit = writeAudit ? await collectDeviceAudit(includeIp) : null;
             const blob = await exportPdf(doc, config, {
                 headerPages: targetPages,
                 keepPages,
                 mode: pdfMode,
+                audit,
             });
             download(blob, `${baseName(doc.fileName)}-duzenlenmis.pdf`);
         } catch (cause) {
@@ -395,6 +424,7 @@ export default function App() {
                             onTogglePicking={() => setPicking((value) => !value)}
                             pdfMode={pdfMode}
                             onPdfModeChange={setPdfMode}
+                            pagePt={doc.first.heightPt}
                             pageCount={doc.pageCount}
                             firstPageOnly={firstPageOnly}
                             onFirstPageOnlyChange={setFirstPageOnly}
@@ -410,6 +440,14 @@ export default function App() {
                             audit={audit}
                             excluded={excluded}
                             onExcludedChange={setExcluded}
+                            writeAudit={writeAudit}
+                            onWriteAuditChange={(value) => {
+                                setWriteAudit(value);
+                                if (!value) setIncludeIp(false);
+                            }}
+                            includeIp={includeIp}
+                            onIncludeIpChange={setIncludeIp}
+                            auditPreview={auditPreview}
                             autoDrop={autoDrop}
                             onAutoDropChange={(value) => {
                                 setAutoDrop(value);

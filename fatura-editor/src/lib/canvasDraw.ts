@@ -23,12 +23,12 @@ export function drawHeaderOnCanvas(
     }
 
     ctx.beginPath();
-    ctx.rect(layout.box.x, layout.box.y, layout.box.w, layout.box.h);
+    ctx.rect(layout.cover.x, layout.cover.y, layout.cover.w, layout.cover.h);
     ctx.clip();
 
     if (layout.fillBackground) {
         ctx.fillStyle = cfg.background;
-        ctx.fillRect(layout.box.x, layout.box.y, layout.box.w, layout.box.h);
+        ctx.fillRect(layout.cover.x, layout.cover.y, layout.cover.w, layout.cover.h);
     }
 
     for (const rule of layout.rules) {
