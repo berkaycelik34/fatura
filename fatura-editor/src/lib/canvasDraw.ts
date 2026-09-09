@@ -9,8 +9,9 @@ export function drawHeaderOnCanvas(
     pageW: number,
     pageH: number,
 ): void {
-    const measure: Measure = (text, size, bold) => {
+    const measure: Measure = (text, size, bold, spacing) => {
         ctx.font = canvasFont(size, bold, cfg.font);
+        ctx.letterSpacing = `${spacing}px`;
         return ctx.measureText(text).width;
     };
 
@@ -30,15 +31,21 @@ export function drawHeaderOnCanvas(
         ctx.fillRect(layout.box.x, layout.box.y, layout.box.w, layout.box.h);
     }
 
+    for (const rule of layout.rules) {
+        ctx.fillStyle = layout.ruleColor;
+        ctx.fillRect(rule.x, rule.y, rule.w, rule.h);
+    }
+
     if (layout.logo && cfg.logo) {
         ctx.drawImage(cfg.logo.image, layout.logo.x, layout.logo.y, layout.logo.w, layout.logo.h);
     }
 
-    ctx.fillStyle = cfg.textColor;
     ctx.textBaseline = "top";
     for (const item of layout.items) {
         ctx.font = canvasFont(item.size, item.bold, cfg.font);
+        ctx.letterSpacing = `${item.spacing}px`;
         ctx.textAlign = item.align;
+        ctx.fillStyle = item.color;
         ctx.fillText(item.text, item.x, item.top);
     }
 

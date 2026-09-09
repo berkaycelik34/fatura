@@ -1,11 +1,17 @@
 import interBoldUrl from "../assets/Inter-Bold.ttf?url";
 import interRegularUrl from "../assets/Inter-Regular.ttf?url";
+import montserratBoldUrl from "../assets/Montserrat-Bold.ttf?url";
+import montserratRegularUrl from "../assets/Montserrat-Regular.ttf?url";
+import openSansBoldUrl from "../assets/OpenSans-Bold.ttf?url";
+import openSansRegularUrl from "../assets/OpenSans-Regular.ttf?url";
+import ptSerifBoldUrl from "../assets/PTSerif-Bold.ttf?url";
+import ptSerifRegularUrl from "../assets/PTSerif-Regular.ttf?url";
 import robotoBoldUrl from "../assets/Roboto-Bold.ttf?url";
 import robotoRegularUrl from "../assets/Roboto-Regular.ttf?url";
 
-export type FontId = "inter" | "roboto";
+export type FontId = "inter" | "montserrat" | "roboto" | "opensans" | "ptserif";
 
-interface FontDefinition {
+export interface FontDefinition {
     id: FontId;
     label: string;
     note: string;
@@ -15,23 +21,47 @@ interface FontDefinition {
     bold: string;
 }
 
-/** Başlıkta kullanılabilecek yazı tipleri. Türkçe karakterlerin tümünü kapsarlar. */
+/** Başlıkta kullanılabilecek yazı tipleri; hepsi Türkçe karakterlerin tümünü kapsar. */
 export const FONTS: FontDefinition[] = [
     {
         id: "inter",
-        label: "Modern",
-        note: "Inter — arayüzdeki yazı tipi, ferah ve çağdaş görünür.",
+        label: "Inter · Modern",
+        note: "Ferah ve çağdaş. Ekran ve baskıda nötr durur.",
         family: "FaturaInter",
         regular: interRegularUrl,
         bold: interBoldUrl,
     },
     {
+        id: "montserrat",
+        label: "Montserrat · Kurumsal",
+        note: "Geniş ve geometrik. Firma adı büyük yazıldığında etkili.",
+        family: "FaturaMontserrat",
+        regular: montserratRegularUrl,
+        bold: montserratBoldUrl,
+    },
+    {
         id: "roboto",
-        label: "Nötr",
-        note: "Roboto — klasik fatura çıktılarına daha yakın durur.",
+        label: "Roboto · Nötr",
+        note: "Klasik fatura çıktılarına en yakın duran seçenek.",
         family: "FaturaRoboto",
         regular: robotoRegularUrl,
         bold: robotoBoldUrl,
+    },
+    {
+        id: "opensans",
+        label: "Open Sans · Okunur",
+        note: "Küçük puntoda bile rahat okunur; uzun adresler için iyi.",
+        family: "FaturaOpenSans",
+        regular: openSansRegularUrl,
+        bold: openSansBoldUrl,
+    },
+    {
+        id: "ptserif",
+        label: "PT Serif · Klasik",
+        note: "Tırnaklı. Resmî ve köklü bir görünüm verir.",
+        family: "FaturaPTSerif",
+        regular: ptSerifRegularUrl,
+        bold: ptSerifBoldUrl,
     },
 ];
 
@@ -39,20 +69,26 @@ export function fontById(id: FontId): FontDefinition {
     return FONTS.find((font) => font.id === id) ?? FONTS[0];
 }
 
-let loading: Promise<void> | null = null;
+const faceCache = new Map<FontId, Promise<void>>();
 
-/** Önizleme ile PDF çıktısının birebir aynı olması için tüm yazı tiplerini yükler. */
-export function loadFonts(): Promise<void> {
-    if (!loading) {
-        const faces = FONTS.flatMap((font) => [
-            new FontFace(font.family, `url(${font.regular})`, { weight: "400" }),
-            new FontFace(font.family, `url(${font.bold})`, { weight: "700" }),
-        ]);
-        loading = Promise.all(faces.map((face) => face.load())).then((loaded) => {
-            loaded.forEach((face) => document.fonts.add(face));
-        });
-    }
-    return loading;
+/**
+ * Seçilen yazı tipini tarayıcıya yükler. Tümü baştan indirilmez; hangisi
+ * kullanılıyorsa yalnızca o alınır.
+ */
+export function ensureFont(id: FontId): Promise<void> {
+    const cached = faceCache.get(id);
+    if (cached) return cached;
+
+    const font = fontById(id);
+    const promise = Promise.all([
+        new FontFace(font.family, `url(${font.regular})`, { weight: "400" }).load(),
+        new FontFace(font.family, `url(${font.bold})`, { weight: "700" }).load(),
+    ]).then((faces) => {
+        faces.forEach((face) => document.fonts.add(face));
+    });
+
+    faceCache.set(id, promise);
+    return promise;
 }
 
 export function canvasFont(size: number, bold: boolean, id: FontId): string {

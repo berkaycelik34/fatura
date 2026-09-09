@@ -9,6 +9,12 @@ karakterlerin tümünü kapsar).
 - Kaynak: https://fonts.google.com/specimen/Inter
 - Lisans: SIL Open Font License 1.1 — https://openfontlicense.org
 
+## Montserrat, Open Sans, PT Serif (başlık yazı tipi seçenekleri)
+
+Google Fonts'tan alınan latin + latin-ext alt kümeleridir; Türkçe karakterlerin
+tümünü kapsar. Montserrat ve Open Sans SIL Open Font License 1.1, PT Serif ise
+SIL Open Font License 1.1 ile dağıtılır.
+
 ## Roboto ("Nötr" başlık yazı tipi)
 
 `Roboto-Regular.ttf` ve `Roboto-Bold.ttf`, Google Fonts'tan alınan Roboto'nun
